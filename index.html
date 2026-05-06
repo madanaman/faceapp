@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Local Face Photos</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Local-first photo search</p>
+        <h1>Face Library</h1>
+      </div>
+      <div class="actions">
+        <button id="clearDbBtn" class="ghost">Clear Index</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="control-band">
+      <div class="folder-state">
+          <span id="supportBadge" class="badge">Checking local engine</span>
+          <span id="folderLabel">No folder selected</span>
+        </div>
+        <div class="path-row">
+          <label for="pathInput">Photo folder</label>
+          <input id="pathInput" type="text" placeholder="/Users/you/Pictures/Google Photos">
+          <button id="scanPathBtn" class="primary">Scan Path</button>
+        </div>
+        <div class="search-row">
+          <label for="searchInput">Search people</label>
+          <input id="searchInput" type="search" placeholder="Aman, Mom">
+          <button id="searchBtn">Search</button>
+          <button id="showAllBtn" class="ghost">Show All</button>
+        </div>
+      </section>
+
+      <section class="stats-grid" aria-label="Index statistics">
+        <article>
+          <span id="fileCount">0</span>
+          <p>files scanned</p>
+        </article>
+        <article>
+          <span id="faceCount">0</span>
+          <p>faces found</p>
+        </article>
+        <article>
+          <span id="tagCount">0</span>
+          <p>people tagged</p>
+        </article>
+        <article>
+          <span id="matchCount">0</span>
+          <p>current matches</p>
+        </article>
+      </section>
+
+      <section class="progress-wrap" aria-live="polite">
+        <div class="progress-info">
+          <span id="progressText">Choose a folder to begin.</span>
+          <span id="progressPercent"></span>
+        </div>
+        <progress id="scanProgress" max="100" value="0"></progress>
+      </section>
+
+      <section class="workspace">
+        <aside>
+          <div class="panel-title">
+            <h2>People</h2>
+            <button id="untaggedBtn" class="mini">Untagged</button>
+          </div>
+          <div id="peopleList" class="people-list"></div>
+        </aside>
+
+        <section class="gallery-shell">
+          <div class="panel-title">
+            <h2 id="galleryTitle">Matches</h2>
+            <span id="galleryHint">Search uses AND matching for multiple names.</span>
+          </div>
+          <div id="gallery" class="gallery"></div>
+        </section>
+      </section>
+    </main>
+
+    <template id="photoTemplate">
+      <article class="photo-card">
+        <div class="media-wrap"></div>
+        <div class="photo-meta">
+          <strong class="file-name"></strong>
+          <span class="file-path"></span>
+        </div>
+        <div class="faces"></div>
+      </article>
+    </template>
+
+    <template id="faceTemplate">
+      <div class="face-chip">
+        <canvas width="96" height="96"></canvas>
+        <input type="text" placeholder="Tag name">
+      </div>
+    </template>
+
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>

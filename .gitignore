@@ -1,0 +1,7 @@
+.build/
+.cache/
+__pycache__/
+*.pyc
+face_index.sqlite3
+.venv
+.idea
