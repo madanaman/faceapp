@@ -9,7 +9,7 @@ A small local-first alternative for browsing photos by tagged faces.
 - Uses local `FaceAnalysis(name="buffalo_l", providers=["CoreMLExecutionProvider", "CPUExecutionProvider"])` detection.
 - Shows cropped face thumbnails so you can tag people.
 - Stores InsightFace embeddings and propagates a tag to matching untagged faces.
-- Saves the face boxes, embeddings, and tags in a local SQLite file.
+- Saves photos, faces, people, tags, EXIF metadata, and place-enrichment fields in a local SQLite file.
 - Searches by one person or multiple people in the same file.
 
 ## Privacy model
@@ -51,3 +51,24 @@ Aman
 Aman, Mom
 Aman Mom
 ```
+
+Metadata API examples:
+
+```text
+/api/search?year=2022
+/api/search?city=Toronto
+/api/search?year=2022&city=Toronto
+```
+
+## Database shape
+
+The SQLite database is normalized for future queries:
+
+- `photos`: file identity, dimensions, signature, indexed timestamp.
+- `faces`: face boxes and embeddings linked to photos.
+- `people`: canonical person names.
+- `face_people`: manual or auto-propagated face/person links.
+- `photo_metadata`: EXIF-derived `taken_at`, camera details, GPS, orientation, raw EXIF JSON.
+- `photo_places`: human place names such as city/region/country for later reverse-geocoding enrichment.
+
+Year queries use `photo_metadata.taken_at`. City queries use `photo_places.city`, so GPS-only photos need a future reverse-geocoding enrichment step before natural place searches like `Toronto` become reliable.

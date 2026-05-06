@@ -29,6 +29,23 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
             finally:
                 conn.close()
             return
+        if parsed.path == "/api/search":
+            params = parse_qs(parsed.query)
+            conn = database.connect()
+            try:
+                try:
+                    self.send_json(
+                        database.search_files(
+                            conn,
+                            year=single_param(params, "year"),
+                            city=single_param(params, "city"),
+                        )
+                    )
+                except ValueError as exc:
+                    self.send_json({"ok": False, "error": str(exc)}, status=400)
+            finally:
+                conn.close()
+            return
         if parsed.path == "/api/media":
             params = parse_qs(parsed.query)
             self.send_media(Path(params.get("path", [""])[0]))
@@ -99,3 +116,8 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
         with path.open("rb") as handle:
             while chunk := handle.read(1024 * 1024):
                 self.wfile.write(chunk)
+
+
+def single_param(params: dict, key: str) -> str | None:
+    value = params.get(key, [""])[0].strip()
+    return value or None

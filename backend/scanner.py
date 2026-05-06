@@ -6,6 +6,7 @@ from pathlib import Path
 from . import database
 from .config import IMAGE_SUFFIXES
 from .detector import detect_faces
+from .metadata import extract_photo_metadata
 
 
 def file_signature(path: Path) -> str:
@@ -29,11 +30,25 @@ def scan_folder(folder: Path) -> list[dict]:
             signature = file_signature(path)
             existing = database.find_current_file(conn, file_id, signature)
             if existing:
-                records.append(database.row_to_record(existing))
+                if database.metadata_needs_refresh(conn, file_id):
+                    metadata = extract_photo_metadata(path)
+                    database.save_metadata(conn, file_id, metadata)
+                    database.save_place(
+                        conn,
+                        file_id,
+                        {
+                            "latitude": metadata.get("latitude"),
+                            "longitude": metadata.get("longitude"),
+                            "source": "exif_gps" if metadata.get("latitude") is not None else None,
+                        },
+                    )
+                    conn.commit()
+                records.append(database.photo_to_record(conn, existing))
                 continue
 
             old_tags = database.stored_tags(conn, file_id)
             analysis = detect_faces(path)
+            metadata = extract_photo_metadata(path)
             for face in analysis["faces"]:
                 face["tag"] = old_tags.get(face["id"], "")
 
@@ -46,6 +61,12 @@ def scan_folder(folder: Path) -> list[dict]:
                 "width": analysis["width"],
                 "height": analysis["height"],
                 "faces": analysis["faces"],
+                "metadata": metadata,
+                "place": {
+                    "latitude": metadata.get("latitude"),
+                    "longitude": metadata.get("longitude"),
+                    "source": "exif_gps" if metadata.get("latitude") is not None else None,
+                },
             }
             database.save_file(conn, record)
             conn.commit()

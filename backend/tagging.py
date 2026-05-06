@@ -17,38 +17,23 @@ def propagate_tag(conn, target_embedding: list[float], tag: str) -> int:
         return 0
 
     changed = 0
-    rows = conn.execute("select id, faces from files").fetchall()
-    for row in rows:
-        faces = json.loads(row["faces"])
-        touched = False
-        for face in faces:
-            if face.get("tag"):
-                continue
-            if cosine(target_embedding, face.get("embedding", [])) >= match_threshold():
-                face["tag"] = tag
-                changed += 1
-                touched = True
-        if touched:
-            database.update_faces(conn, row["id"], faces)
+    for row in database.untagged_faces(conn):
+        embedding = json.loads(row["embedding"] or "[]")
+        if cosine(target_embedding, embedding) >= match_threshold():
+            database.set_face_tag(conn, row["id"], tag, source="auto_propagated")
+            changed += 1
     return changed
 
 
 def tag_face(file_id: str, face_id: str, tag: str) -> dict:
     conn = database.connect()
     try:
-        row = database.find_file(conn, file_id)
-        if not row:
+        if not database.find_file(conn, file_id):
             return {"ok": False, "error": "File not found", "status": 404}
 
-        faces = json.loads(row["faces"])
-        target_embedding = []
         clean_tag = tag.strip()
-        for face in faces:
-            if face["id"] == face_id:
-                face["tag"] = clean_tag
-                target_embedding = face.get("embedding", [])
-
-        database.update_faces(conn, file_id, faces)
+        target_embedding = database.face_embedding(conn, face_id)
+        database.set_face_tag(conn, face_id, clean_tag, source="manual")
         propagated = propagate_tag(conn, target_embedding, clean_tag)
         conn.commit()
         return {"ok": True, "propagated": propagated, "files": database.list_files(conn)}
