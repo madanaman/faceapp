@@ -135,6 +135,7 @@ aside,
 .control-band {
   display: flex;
   justify-content: space-between;
+  flex-direction: column;
   align-items: center;
   gap: 18px;
   padding: 16px;

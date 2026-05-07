@@ -138,7 +138,8 @@ async function scanPath() {
       state.files.set(record.id, record);
     }
     els.folderLabel.textContent = path;
-    setProgress(`Scan complete: ${payload.files.length} image files indexed.`, 100);
+    const autoTagged = payload.autoTagged ? ` ${payload.autoTagged} faces auto-tagged.` : "";
+    setProgress(`Scan complete: ${payload.files.length} image files indexed.${autoTagged}`, 100);
     showAll();
   } catch (error) {
     setProgress(error.message, 0);

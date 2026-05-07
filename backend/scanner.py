@@ -7,6 +7,7 @@ from . import database
 from .config import IMAGE_SUFFIXES
 from .detector import detect_faces
 from .metadata import extract_photo_metadata
+from .tagging import apply_known_tags
 
 
 def file_signature(path: Path) -> str:
@@ -20,6 +21,7 @@ def scan_folder(folder: Path) -> list[dict]:
 
     conn = database.connect()
     records = []
+    auto_tagged = 0
 
     try:
         for path in sorted(folder.rglob("*")):
@@ -30,6 +32,13 @@ def scan_folder(folder: Path) -> list[dict]:
             signature = file_signature(path)
             existing = database.find_current_file(conn, file_id, signature)
             if existing:
+                record = database.photo_to_record(conn, existing)
+                tagged_count = apply_known_tags(conn, record["faces"])
+                if tagged_count:
+                    auto_tagged += tagged_count
+                    database.update_faces(conn, file_id, record["faces"])
+                    conn.commit()
+                    record = database.photo_to_record(conn, existing)
                 if database.metadata_needs_refresh(conn, file_id):
                     metadata = extract_photo_metadata(path)
                     database.save_metadata(conn, file_id, metadata)
@@ -43,7 +52,8 @@ def scan_folder(folder: Path) -> list[dict]:
                         },
                     )
                     conn.commit()
-                records.append(database.photo_to_record(conn, existing))
+                    record = database.photo_to_record(conn, existing)
+                records.append(record)
                 continue
 
             old_tags = database.stored_tags(conn, file_id)
@@ -51,6 +61,7 @@ def scan_folder(folder: Path) -> list[dict]:
             metadata = extract_photo_metadata(path)
             for face in analysis["faces"]:
                 face["tag"] = old_tags.get(face["id"], "")
+            auto_tagged += apply_known_tags(conn, analysis["faces"])
 
             record = {
                 "id": file_id,
@@ -74,4 +85,4 @@ def scan_folder(folder: Path) -> list[dict]:
     finally:
         conn.close()
 
-    return records
+    return {"files": records, "autoTagged": auto_tagged}
