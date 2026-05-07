@@ -25,6 +25,33 @@ def propagate_tag(conn, target_embedding: list[float], tag: str) -> int:
     return changed
 
 
+def best_known_tag(conn, embedding: list[float]) -> str:
+    if not embedding:
+        return ""
+
+    best_tag = ""
+    best_score = 0.0
+    for candidate in database.tagged_face_embeddings(conn):
+        score = cosine(embedding, candidate["embedding"])
+        if score > best_score:
+            best_score = score
+            best_tag = candidate["tag"]
+
+    return best_tag if best_score >= match_threshold() else ""
+
+
+def apply_known_tags(conn, faces: list[dict]) -> int:
+    changed = 0
+    for face in faces:
+        if face.get("tag"):
+            continue
+        tag = best_known_tag(conn, face.get("embedding", []))
+        if tag:
+            face["tag"] = tag
+            changed += 1
+    return changed
+
+
 def tag_face(file_id: str, face_id: str, tag: str) -> dict:
     conn = database.connect()
     try:

@@ -68,8 +68,8 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
     def handle_scan(self) -> None:
         payload = self.read_json()
         try:
-            records = scan_folder(Path(payload.get("path", "")).expanduser())
-            self.send_json({"ok": True, "files": records})
+            result = scan_folder(Path(payload.get("path", "")).expanduser())
+            self.send_json({"ok": True, **result})
         except Exception as exc:
             self.send_json({"ok": False, "error": str(exc)}, status=400)
 

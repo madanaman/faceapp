@@ -398,6 +398,22 @@ def untagged_faces(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     ).fetchall()
 
 
+def tagged_face_embeddings(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        """
+        select
+            f.embedding,
+            p.name as tag
+        from faces f
+        join face_people fp on fp.face_id = f.id
+        join people p on p.id = fp.person_id
+        where f.embedding is not null
+          and f.embedding != ''
+        """
+    ).fetchall()
+    return [{"embedding": json.loads(row["embedding"] or "[]"), "tag": row["tag"]} for row in rows]
+
+
 def update_faces(conn: sqlite3.Connection, file_id: str, faces: list[dict]) -> None:
     replace_faces(conn, file_id, faces, source="manual")
 
