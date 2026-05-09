@@ -49,6 +49,7 @@ def apply_known_tags(conn, faces: list[dict]) -> int:
         tag = best_known_tag(conn, face.get("embedding", []))
         if tag:
             face["tag"] = tag
+            face["tagSource"] = "auto_propagated"
             changed += 1
     return changed
 

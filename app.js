@@ -7,6 +7,7 @@ const state = {
   db: null,
   files: new Map(),
   filteredIds: [],
+  lightboxIndex: 0,
   currentView: { type: "all", title: "All Indexed Files", hint: "Search uses AND matching for multiple names.", terms: [] },
   objectUrls: new Map(),
   support: {
@@ -37,6 +38,17 @@ const els = {
   gallery: document.querySelector("#gallery"),
   galleryTitle: document.querySelector("#galleryTitle"),
   galleryHint: document.querySelector("#galleryHint"),
+  yearFilter: document.querySelector("#yearFilter"),
+  monthFilter: document.querySelector("#monthFilter"),
+  dateFilter: document.querySelector("#dateFilter"),
+  sortDirection: document.querySelector("#sortDirection"),
+  lightbox: document.querySelector("#lightbox"),
+  lightboxImage: document.querySelector("#lightboxImage"),
+  lightboxName: document.querySelector("#lightboxName"),
+  lightboxMeta: document.querySelector("#lightboxMeta"),
+  lightboxClose: document.querySelector("#lightboxClose"),
+  lightboxPrev: document.querySelector("#lightboxPrev"),
+  lightboxNext: document.querySelector("#lightboxNext"),
   photoTemplate: document.querySelector("#photoTemplate"),
   faceTemplate: document.querySelector("#faceTemplate"),
 };
@@ -63,6 +75,17 @@ function bindEvents() {
   els.searchBtn.addEventListener("click", search);
   els.showAllBtn.addEventListener("click", showAll);
   els.untaggedBtn.addEventListener("click", showUntagged);
+  els.yearFilter.addEventListener("change", renderCurrentView);
+  els.monthFilter.addEventListener("change", renderCurrentView);
+  els.dateFilter.addEventListener("change", renderCurrentView);
+  els.sortDirection.addEventListener("change", renderCurrentView);
+  els.lightboxClose.addEventListener("click", closeLightbox);
+  els.lightboxPrev.addEventListener("click", () => stepLightbox(-1));
+  els.lightboxNext.addEventListener("click", () => stepLightbox(1));
+  els.lightbox.addEventListener("click", (event) => {
+    if (event.target === els.lightbox) closeLightbox();
+  });
+  document.addEventListener("keydown", handleLightboxKeys);
   els.searchInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") search();
   });
@@ -112,6 +135,7 @@ async function restoreBackendIndex() {
   for (const record of records) {
     state.files.set(record.id, record);
   }
+  populateYearFilter();
   if (records.length) {
     els.progressText.textContent = "Saved server index restored.";
   }
@@ -138,6 +162,7 @@ async function scanPath() {
     for (const record of payload.files) {
       state.files.set(record.id, record);
     }
+    populateYearFilter();
     els.folderLabel.textContent = path;
     const autoTagged = payload.autoTagged ? ` ${payload.autoTagged} faces auto-tagged.` : "";
     const warningText = payload.warnings?.length ? ` ${payload.warnings.length} files warned/skipped.` : "";
@@ -158,6 +183,7 @@ function squareCrop(box, width, height) {
 }
 
 function renderGallery(ids, title = "Matches", hint = "Search uses AND matching for multiple names.") {
+  state.filteredIds = ids;
   els.galleryTitle.textContent = title;
   els.galleryHint.textContent = hint;
   els.matchCount.textContent = ids.length;
@@ -190,7 +216,7 @@ function renderCurrentView({ preserveScroll = false } = {}) {
   } else if (state.currentView.type === "search") {
     search();
   } else {
-    showAll();
+    applyGalleryFilters();
   }
   if (preserveScroll) {
     requestAnimationFrame(() => window.scrollTo({ top: scrollY }));
@@ -222,6 +248,7 @@ function renderPhoto(fileRecord) {
 
   const media = createMediaElement(fileRecord);
   mediaWrap.append(media);
+  mediaWrap.addEventListener("click", () => openLightbox(fileRecord.id));
 
   for (const face of sortedFaces(fileRecord.faces)) {
     mediaWrap.append(renderFaceBox(face, fileRecord));
@@ -361,31 +388,35 @@ function drawFaceCrop(canvas, image, face, fileRecord) {
 
 function search() {
   const terms = parseSearch(els.searchInput.value);
-  if (!terms.length) {
-    showAll();
-    return;
-  }
   state.currentView = {
-    type: "search",
-    title: `Search: ${terms.join(" + ")}`,
-    hint: "Multiple names require every person to appear in the same file.",
+    type: terms.length ? "search" : "all",
+    title: terms.length ? `Search: ${terms.join(" + ")}` : "All Indexed Files",
+    hint: terms.length
+      ? "Multiple names require every person to appear in the same file."
+      : "Search uses AND matching for multiple names.",
     terms,
   };
+  applyGalleryFilters();
+}
 
+function applyGalleryFilters() {
+  const terms = state.currentView.terms || [];
   const ids = [...state.files.values()]
-    .filter((fileRecord) => {
-      const tags = new Set(fileRecord.faces.map((face) => normalizeName(face.tag)).filter(Boolean));
-      return terms.every((term) => tags.has(term));
-    })
+    .filter((fileRecord) => matchesPeople(fileRecord, terms))
+    .filter(matchesDateFilters)
+    .sort(comparePhotos)
     .map((fileRecord) => fileRecord.id);
 
   renderGallery(ids, state.currentView.title, state.currentView.hint);
 }
 
 function showAll() {
+  els.searchInput.value = "";
+  els.yearFilter.value = "";
+  els.monthFilter.value = "";
+  els.dateFilter.value = "";
   state.currentView = { type: "all", title: "All Indexed Files", hint: "Search uses AND matching for multiple names.", terms: [] };
-  state.filteredIds = [...state.files.keys()];
-  renderGallery(state.filteredIds, state.currentView.title, state.currentView.hint);
+  applyGalleryFilters();
 }
 
 function showUntagged() {
@@ -397,8 +428,58 @@ function showUntagged() {
   };
   const ids = [...state.files.values()]
     .filter((fileRecord) => fileRecord.faces.some((face) => !normalizeName(face.tag)))
+    .filter(matchesDateFilters)
+    .sort(comparePhotos)
     .map((fileRecord) => fileRecord.id);
   renderGallery(ids, state.currentView.title, state.currentView.hint);
+}
+
+function matchesPeople(fileRecord, terms) {
+  if (!terms.length) return true;
+  const tags = new Set(fileRecord.faces.map((face) => normalizeName(face.tag)).filter(Boolean));
+  return terms.every((term) => tags.has(term));
+}
+
+function matchesDateFilters(fileRecord) {
+  const taken = photoTakenDate(fileRecord);
+  const exactDate = els.dateFilter.value;
+  const year = els.yearFilter.value;
+  const month = els.monthFilter.value;
+  if (exactDate) return taken?.slice(0, 10) === exactDate;
+  if (year && taken?.slice(0, 4) !== year) return false;
+  if (month && taken?.slice(5, 7) !== month) return false;
+  return true;
+}
+
+function comparePhotos(a, b) {
+  const direction = els.sortDirection.value === "asc" ? 1 : -1;
+  const aKey = photoSortKey(a);
+  const bKey = photoSortKey(b);
+  if (aKey === bKey) return a.name.localeCompare(b.name);
+  return aKey > bKey ? direction : -direction;
+}
+
+function photoSortKey(fileRecord) {
+  return photoTakenDate(fileRecord) || fileRecord.name || "";
+}
+
+function photoTakenDate(fileRecord) {
+  return fileRecord.metadata?.taken_at || "";
+}
+
+function populateYearFilter() {
+  const current = els.yearFilter.value;
+  const years = [...new Set([...state.files.values()]
+    .map((fileRecord) => photoTakenDate(fileRecord)?.slice(0, 4))
+    .filter(Boolean))]
+    .sort((a, b) => b.localeCompare(a));
+  els.yearFilter.replaceChildren(new Option("Any", ""));
+  for (const year of years) {
+    els.yearFilter.append(new Option(year, year));
+  }
+  if (years.includes(current)) {
+    els.yearFilter.value = current;
+  }
 }
 
 function parseSearch(value) {
@@ -473,6 +554,7 @@ async function restoreIndex() {
   for (const fileRecord of files) {
     state.files.set(fileRecord.id, fileRecord);
   }
+  populateYearFilter();
   if (files.length) {
     els.progressText.textContent = "Saved tag index restored. Choose the same folder to display local files.";
   }
@@ -503,6 +585,7 @@ async function saveFile(fileRecord) {
         for (const record of payload.files) {
           state.files.set(record.id, record);
         }
+        populateYearFilter();
         if (payload.propagated) {
           setProgress(`Tagged ${payload.propagated + 1} matching faces.`, 100);
         }
@@ -572,6 +655,7 @@ async function ignoreFace(fileRecord, face) {
   for (const record of payload.files) {
     state.files.set(record.id, record);
   }
+  populateYearFilter();
   setProgress("Face removed and will be ignored on future scans.", 100);
   renderCurrentView({ preserveScroll: true });
 }
@@ -592,6 +676,7 @@ async function rescanPhoto(fileRecord, resetIgnored, button) {
     for (const record of payload.files) {
       state.files.set(record.id, record);
     }
+    populateYearFilter();
     const autoTagged = payload.autoTagged ? ` ${payload.autoTagged} faces auto-tagged.` : "";
     setProgress(`${resetIgnored ? "Ignored faces reset and photo rescanned." : "Photo rescanned."}${autoTagged}`, 100);
     renderCurrentView({ preserveScroll: true });
@@ -600,6 +685,42 @@ async function rescanPhoto(fileRecord, resetIgnored, button) {
   } finally {
     button.disabled = false;
   }
+}
+
+function openLightbox(fileId) {
+  const index = state.filteredIds.indexOf(fileId);
+  if (index < 0) return;
+  state.lightboxIndex = index;
+  renderLightbox();
+  els.lightbox.hidden = false;
+}
+
+function closeLightbox() {
+  els.lightbox.hidden = true;
+}
+
+function stepLightbox(delta) {
+  if (!state.filteredIds.length) return;
+  state.lightboxIndex = (state.lightboxIndex + delta + state.filteredIds.length) % state.filteredIds.length;
+  renderLightbox();
+}
+
+function renderLightbox() {
+  const fileRecord = state.files.get(state.filteredIds[state.lightboxIndex]);
+  if (!fileRecord) return;
+  els.lightboxImage.src = getObjectUrl(fileRecord);
+  els.lightboxImage.alt = fileRecord.name;
+  els.lightboxName.textContent = fileRecord.name;
+  const people = [...new Set(fileRecord.faces.map((face) => face.tag).filter(Boolean))].sort();
+  const date = photoTakenDate(fileRecord)?.slice(0, 10) || "Date unknown";
+  els.lightboxMeta.textContent = `${date}${people.length ? ` · ${people.join(", ")}` : ""}`;
+}
+
+function handleLightboxKeys(event) {
+  if (els.lightbox.hidden) return;
+  if (event.key === "Escape") closeLightbox();
+  if (event.key === "ArrowLeft") stepLightbox(-1);
+  if (event.key === "ArrowRight") stepLightbox(1);
 }
 
 function normalizeName(name = "") {
