@@ -108,6 +108,7 @@ def clean_text(value) -> str | None:
 
 
 def serializable_exif(exif: dict[str, Any], gps: dict[str, Any]) -> dict:
+    # GPSInfo is an opaque numeric IFD in the main EXIF block; store the decoded names instead.
     simple = {str(key): simple_value(value) for key, value in exif.items() if key != "GPSInfo"}
     simple["GPSInfo"] = {str(key): simple_value(value) for key, value in gps.items()}
     return simple

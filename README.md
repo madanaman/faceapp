@@ -35,7 +35,9 @@ FACE_MATCH_THRESHOLD=0.5 /opt/homebrew/Caskroom/miniforge/base/envs/faceapp/bin/
 From this folder:
 
 ```sh
-/opt/homebrew/Caskroom/miniforge/base/envs/faceapp/bin/python server.py
+./run.sh
+# or
+make run
 ```
 
 Then open:
