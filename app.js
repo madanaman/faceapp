@@ -7,6 +7,7 @@ const state = {
   db: null,
   files: new Map(),
   filteredIds: [],
+  currentView: { type: "all", title: "All Indexed Files", hint: "Search uses AND matching for multiple names.", terms: [] },
   objectUrls: new Map(),
   support: {
     backend: false,
@@ -182,6 +183,20 @@ function renderGallery(ids, title = "Matches", hint = "Search uses AND matching 
   updateStats();
 }
 
+function renderCurrentView({ preserveScroll = false } = {}) {
+  const scrollY = window.scrollY;
+  if (state.currentView.type === "untagged") {
+    showUntagged();
+  } else if (state.currentView.type === "search") {
+    search();
+  } else {
+    showAll();
+  }
+  if (preserveScroll) {
+    requestAnimationFrame(() => window.scrollTo({ top: scrollY }));
+  }
+}
+
 function renderPhoto(fileRecord) {
   const fragment = els.photoTemplate.content.cloneNode(true);
   const card = fragment.querySelector(".photo-card");
@@ -197,7 +212,7 @@ function renderPhoto(fileRecord) {
   const media = createMediaElement(fileRecord);
   mediaWrap.append(media);
 
-  for (const face of fileRecord.faces) {
+  for (const face of sortedFaces(fileRecord.faces)) {
     mediaWrap.append(renderFaceBox(face, fileRecord));
     faces.append(renderFaceEditor(fileRecord, face));
   }
@@ -210,6 +225,17 @@ function renderPhoto(fileRecord) {
   }
 
   return card;
+}
+
+function sortedFaces(faces) {
+  return [...faces].sort((a, b) => {
+    const aTag = normalizeName(a.tag);
+    const bTag = normalizeName(b.tag);
+    if (aTag && !bTag) return -1;
+    if (!aTag && bTag) return 1;
+    if (aTag || bTag) return aTag.localeCompare(bTag);
+    return a.id.localeCompare(b.id);
+  });
 }
 
 function createMediaElement(fileRecord) {
@@ -259,7 +285,19 @@ function renderFaceEditor(fileRecord, face) {
   const chip = fragment.querySelector(".face-chip");
   const canvas = fragment.querySelector("canvas");
   const input = fragment.querySelector("input");
+  let removeButton = fragment.querySelector(".remove-face");
   const image = new Image();
+
+  if (!removeButton) {
+    removeButton = document.createElement("button");
+    removeButton.className = "remove-face";
+    removeButton.type = "button";
+    removeButton.setAttribute("aria-label", "Ignore this face");
+    removeButton.title = "Ignore this face";
+    removeButton.textContent = "−";
+    chip.append(removeButton);
+  }
+  removeButton.textContent = "−";
 
   input.value = face.tag || "";
   input.addEventListener("change", async () => {
@@ -272,6 +310,15 @@ function renderFaceEditor(fileRecord, face) {
 
   image.onload = () => drawFaceCrop(canvas, image, face, fileRecord);
   image.src = face.thumbnail || getObjectUrl(fileRecord);
+  removeButton.addEventListener("click", async () => {
+    removeButton.disabled = true;
+    try {
+      await ignoreFace(fileRecord, face);
+    } catch (error) {
+      setProgress(error.message, 0);
+      removeButton.disabled = false;
+    }
+  });
 
   return chip;
 }
@@ -304,6 +351,12 @@ function search() {
     showAll();
     return;
   }
+  state.currentView = {
+    type: "search",
+    title: `Search: ${terms.join(" + ")}`,
+    hint: "Multiple names require every person to appear in the same file.",
+    terms,
+  };
 
   const ids = [...state.files.values()]
     .filter((fileRecord) => {
@@ -312,19 +365,26 @@ function search() {
     })
     .map((fileRecord) => fileRecord.id);
 
-  renderGallery(ids, `Search: ${terms.join(" + ")}`, "Multiple names require every person to appear in the same file.");
+  renderGallery(ids, state.currentView.title, state.currentView.hint);
 }
 
 function showAll() {
+  state.currentView = { type: "all", title: "All Indexed Files", hint: "Search uses AND matching for multiple names.", terms: [] };
   state.filteredIds = [...state.files.keys()];
-  renderGallery(state.filteredIds, "All Indexed Files");
+  renderGallery(state.filteredIds, state.currentView.title, state.currentView.hint);
 }
 
 function showUntagged() {
+  state.currentView = {
+    type: "untagged",
+    title: "Untagged Faces",
+    hint: "Tag the cropped faces, then search by one name or several names.",
+    terms: [],
+  };
   const ids = [...state.files.values()]
     .filter((fileRecord) => fileRecord.faces.some((face) => !normalizeName(face.tag)))
     .map((fileRecord) => fileRecord.id);
-  renderGallery(ids, "Untagged Faces", "Tag the cropped faces, then search by one name or several names.");
+  renderGallery(ids, state.currentView.title, state.currentView.hint);
 }
 
 function parseSearch(value) {
@@ -432,6 +492,7 @@ async function saveFile(fileRecord) {
         if (payload.propagated) {
           setProgress(`Tagged ${payload.propagated + 1} matching faces.`, 100);
         }
+        renderCurrentView({ preserveScroll: true });
       }
     }
     return;
@@ -475,6 +536,30 @@ async function clearIndex() {
     };
     request.onerror = () => reject(request.error);
   });
+}
+
+async function ignoreFace(fileRecord, face) {
+  if (!state.support.backend) {
+    fileRecord.faces = fileRecord.faces.filter((candidate) => candidate.id !== face.id);
+    await saveFile(fileRecord);
+    renderCurrentView({ preserveScroll: true });
+    return;
+  }
+
+  const response = await fetch("/api/ignore-face", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ fileId: fileRecord.id, faceId: face.id }),
+  });
+  const payload = await response.json();
+  if (!payload.ok) throw new Error(payload.error || "Could not remove face.");
+
+  state.files.clear();
+  for (const record of payload.files) {
+    state.files.set(record.id, record);
+  }
+  setProgress("Face removed and will be ignored on future scans.", 100);
+  renderCurrentView({ preserveScroll: true });
 }
 
 function normalizeName(name = "") {

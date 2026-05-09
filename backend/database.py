@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from .config import DB_PATH, match_threshold
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def connect() -> sqlite3.Connection:
@@ -70,6 +70,17 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
             primary key (face_id, person_id)
         );
 
+        create table if not exists ignored_faces (
+            id integer primary key autoincrement,
+            photo_id text not null references photos(id) on delete cascade,
+            box_x real not null,
+            box_y real not null,
+            box_width real not null,
+            box_height real not null,
+            embedding text,
+            created_at text not null
+        );
+
         create table if not exists photo_metadata (
             photo_id text primary key references photos(id) on delete cascade,
             taken_at text,
@@ -98,6 +109,7 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         create index if not exists idx_photo_metadata_lat_lon on photo_metadata(latitude, longitude);
         create index if not exists idx_photo_places_city on photo_places(city);
         create index if not exists idx_face_people_person_id on face_people(person_id);
+        create index if not exists idx_ignored_faces_photo_id on ignored_faces(photo_id);
         """
     )
 
@@ -106,6 +118,7 @@ def run_migrations(conn: sqlite3.Connection) -> None:
     version = conn.execute("pragma user_version").fetchone()[0]
     if version < 1:
         migrate_legacy_files(conn)
+    if version < 2:
         conn.execute(f"pragma user_version = {SCHEMA_VERSION}")
         conn.commit()
 
@@ -134,6 +147,8 @@ def migrate_legacy_files(conn: sqlite3.Connection) -> None:
             "place": {},
         }
         save_file(conn, record)
+
+
 def table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
     return bool(
         conn.execute(
@@ -277,7 +292,8 @@ def save_file(conn: sqlite3.Connection, record: dict) -> None:
             now,
         ),
     )
-    replace_faces(conn, record["id"], record.get("faces", []), source="manual")
+    faces = filter_ignored_faces(conn, record["id"], record.get("faces", []))
+    replace_faces(conn, record["id"], faces, source="manual")
     save_metadata(conn, record["id"], record.get("metadata", {}))
     save_place(conn, record["id"], record.get("place", {}))
 
@@ -311,6 +327,78 @@ def replace_faces(conn: sqlite3.Connection, photo_id: str, faces: list[dict], so
         )
         if face.get("tag"):
             set_face_tag(conn, face["id"], face["tag"], source=source)
+
+
+def filter_ignored_faces(conn: sqlite3.Connection, photo_id: str, faces: list[dict]) -> list[dict]:
+    ignored = ignored_faces(conn, photo_id)
+    return [face for face in faces if not matches_ignored_face(face, ignored)]
+
+
+def ignored_faces(conn: sqlite3.Connection, photo_id: str) -> list[dict]:
+    rows = conn.execute("select * from ignored_faces where photo_id = ?", (photo_id,)).fetchall()
+    return [
+        {
+            "box": {
+                "x": row["box_x"],
+                "y": row["box_y"],
+                "width": row["box_width"],
+                "height": row["box_height"],
+            },
+            "embedding": json.loads(row["embedding"] or "[]"),
+        }
+        for row in rows
+    ]
+
+
+def matches_ignored_face(face: dict, ignored: list[dict]) -> bool:
+    for ignored_face in ignored:
+        if embedding_similarity(face.get("embedding", []), ignored_face.get("embedding", [])) >= match_threshold():
+            return True
+        if box_iou(face.get("box", {}), ignored_face.get("box", {})) >= 0.7:
+            return True
+    return False
+
+
+def box_iou(a: dict, b: dict) -> float:
+    if not a or not b:
+        return 0.0
+    ax2 = a["x"] + a["width"]
+    ay2 = a["y"] + a["height"]
+    bx2 = b["x"] + b["width"]
+    by2 = b["y"] + b["height"]
+    intersection_width = max(0.0, min(ax2, bx2) - max(a["x"], b["x"]))
+    intersection_height = max(0.0, min(ay2, by2) - max(a["y"], b["y"]))
+    intersection = intersection_width * intersection_height
+    area_a = a["width"] * a["height"]
+    area_b = b["width"] * b["height"]
+    union = area_a + area_b - intersection
+    return intersection / union if union else 0.0
+
+
+def ignore_face(conn: sqlite3.Connection, file_id: str, face_id: str) -> bool:
+    row = conn.execute("select * from faces where photo_id = ? and id = ?", (file_id, face_id)).fetchone()
+    if not row:
+        return False
+
+    conn.execute(
+        """
+        insert into ignored_faces
+        (photo_id, box_x, box_y, box_width, box_height, embedding, created_at)
+        values (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            file_id,
+            row["box_x"],
+            row["box_y"],
+            row["box_width"],
+            row["box_height"],
+            row["embedding"],
+            datetime.utcnow().isoformat(timespec="seconds"),
+        ),
+    )
+    conn.execute("delete from face_people where face_id = ?", (face_id,))
+    conn.execute("delete from faces where id = ?", (face_id,))
+    return True
 
 
 def reconcile_faces(conn: sqlite3.Connection, photo_id: str, new_faces: list[dict]) -> list[dict]:
@@ -485,6 +573,7 @@ def update_faces(conn: sqlite3.Connection, file_id: str, faces: list[dict]) -> N
 def clear_files(conn: sqlite3.Connection) -> None:
     # Delete order matters while foreign keys are enabled.
     conn.execute("delete from face_people")
+    conn.execute("delete from ignored_faces")
     conn.execute("delete from people")
     conn.execute("delete from faces")
     conn.execute("delete from photo_places")

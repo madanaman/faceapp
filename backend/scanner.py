@@ -56,6 +56,7 @@ def scan_folder(folder: Path) -> dict:
                     warnings.append(f"{path.name}: skipped because it could not be decoded.")
                     continue
 
+                analysis["faces"] = database.filter_ignored_faces(conn, file_id, analysis["faces"])
                 metadata = extract_photo_metadata(path)
                 auto_tagged += apply_known_tags(conn, analysis["faces"])
 

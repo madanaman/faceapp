@@ -54,6 +54,9 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/tag":
             self.handle_tag()
             return
+        if parsed.path == "/api/ignore-face":
+            self.handle_ignore_face()
+            return
         if parsed.path == "/api/clear":
             self.handle_clear()
             return
@@ -76,6 +79,16 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
         )
         status = result.pop("status", 200)
         self.send_json(result, status=status)
+
+    def handle_ignore_face(self) -> None:
+        payload = self.read_json()
+        with database.connection() as conn:
+            with conn:
+                removed = database.ignore_face(conn, payload["fileId"], payload["faceId"])
+            if not removed:
+                self.send_json({"ok": False, "error": "Face not found"}, status=404)
+                return
+            self.send_json({"ok": True, "files": database.list_files(conn)})
 
     def handle_clear(self) -> None:
         with database.connection() as conn:
