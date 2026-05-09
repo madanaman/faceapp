@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from .config import DB_PATH, match_threshold
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def connect() -> sqlite3.Connection:
@@ -78,6 +78,7 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
             box_width real not null,
             box_height real not null,
             embedding text,
+            ignored_tag text,
             created_at text not null
         );
 
@@ -119,6 +120,9 @@ def run_migrations(conn: sqlite3.Connection) -> None:
     if version < 1:
         migrate_legacy_files(conn)
     if version < 2:
+        add_column_if_missing(conn, "ignored_faces", "ignored_tag", "text")
+    if version < 3:
+        add_column_if_missing(conn, "ignored_faces", "ignored_tag", "text")
         conn.execute(f"pragma user_version = {SCHEMA_VERSION}")
         conn.commit()
 
@@ -156,6 +160,12 @@ def table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
             (table_name,),
         ).fetchone()
     )
+
+
+def add_column_if_missing(conn: sqlite3.Connection, table_name: str, column_name: str, column_def: str) -> None:
+    columns = {row["name"] for row in conn.execute(f"pragma table_info({table_name})").fetchall()}
+    if column_name not in columns:
+        conn.execute(f"alter table {table_name} add column {column_name} {column_def}")
 
 
 def list_files(conn: sqlite3.Connection) -> list[dict]:
@@ -379,12 +389,21 @@ def ignore_face(conn: sqlite3.Connection, file_id: str, face_id: str) -> bool:
     row = conn.execute("select * from faces where photo_id = ? and id = ?", (file_id, face_id)).fetchone()
     if not row:
         return False
+    tag_row = conn.execute(
+        """
+        select p.name
+        from face_people fp
+        join people p on p.id = fp.person_id
+        where fp.face_id = ?
+        """,
+        (face_id,),
+    ).fetchone()
 
     conn.execute(
         """
         insert into ignored_faces
-        (photo_id, box_x, box_y, box_width, box_height, embedding, created_at)
-        values (?, ?, ?, ?, ?, ?, ?)
+        (photo_id, box_x, box_y, box_width, box_height, embedding, ignored_tag, created_at)
+        values (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             file_id,
@@ -393,12 +412,17 @@ def ignore_face(conn: sqlite3.Connection, file_id: str, face_id: str) -> bool:
             row["box_width"],
             row["box_height"],
             row["embedding"],
+            tag_row["name"] if tag_row else None,
             datetime.utcnow().isoformat(timespec="seconds"),
         ),
     )
     conn.execute("delete from face_people where face_id = ?", (face_id,))
     conn.execute("delete from faces where id = ?", (face_id,))
     return True
+
+
+def clear_ignored_faces(conn: sqlite3.Connection, file_id: str) -> None:
+    conn.execute("delete from ignored_faces where photo_id = ?", (file_id,))
 
 
 def reconcile_faces(conn: sqlite3.Connection, photo_id: str, new_faces: list[dict]) -> list[dict]:

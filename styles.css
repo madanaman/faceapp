@@ -318,7 +318,7 @@ aside {
 
 .photo-meta {
   display: grid;
-  gap: 3px;
+  gap: 6px;
   padding: 12px 12px 8px;
 }
 
@@ -334,6 +334,19 @@ aside {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.photo-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.photo-actions button {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .faces {

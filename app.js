@@ -204,9 +204,20 @@ function renderPhoto(fileRecord) {
   const name = fragment.querySelector(".file-name");
   const path = fragment.querySelector(".file-path");
   const faces = fragment.querySelector(".faces");
+  const rescanButton = fragment.querySelector(".rescan-photo");
+  const resetIgnoredButton = fragment.querySelector(".reset-ignored");
 
   name.textContent = fileRecord.name;
   path.textContent = fileRecord.path;
+  if (rescanButton) {
+    rescanButton.addEventListener("click", () => rescanPhoto(fileRecord, false, rescanButton));
+  }
+  if (resetIgnoredButton) {
+    resetIgnoredButton.addEventListener("click", () => {
+      if (!confirm("Bring back ignored faces for this photo and rescan it?")) return;
+      rescanPhoto(fileRecord, true, resetIgnoredButton);
+    });
+  }
   mediaWrap.style.aspectRatio = `${fileRecord.width || 4} / ${fileRecord.height || 3}`;
 
   const media = createMediaElement(fileRecord);
@@ -311,6 +322,9 @@ function renderFaceEditor(fileRecord, face) {
   image.onload = () => drawFaceCrop(canvas, image, face, fileRecord);
   image.src = face.thumbnail || getObjectUrl(fileRecord);
   removeButton.addEventListener("click", async () => {
+    if (face.tag && !confirm(`Ignore this face tagged as "${face.tag}"?`)) {
+      return;
+    }
     removeButton.disabled = true;
     try {
       await ignoreFace(fileRecord, face);
@@ -560,6 +574,32 @@ async function ignoreFace(fileRecord, face) {
   }
   setProgress("Face removed and will be ignored on future scans.", 100);
   renderCurrentView({ preserveScroll: true });
+}
+
+async function rescanPhoto(fileRecord, resetIgnored, button) {
+  if (!state.support.backend) return;
+  button.disabled = true;
+  try {
+    const response = await fetch(resetIgnored ? "/api/reset-ignored-faces" : "/api/rescan-photo", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ fileId: fileRecord.id }),
+    });
+    const payload = await response.json();
+    if (!payload.ok) throw new Error(payload.error || "Could not rescan photo.");
+
+    state.files.clear();
+    for (const record of payload.files) {
+      state.files.set(record.id, record);
+    }
+    const autoTagged = payload.autoTagged ? ` ${payload.autoTagged} faces auto-tagged.` : "";
+    setProgress(`${resetIgnored ? "Ignored faces reset and photo rescanned." : "Photo rescanned."}${autoTagged}`, 100);
+    renderCurrentView({ preserveScroll: true });
+  } catch (error) {
+    setProgress(error.message, 0);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function normalizeName(name = "") {
