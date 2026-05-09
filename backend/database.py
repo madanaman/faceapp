@@ -6,7 +6,7 @@ import sqlite3
 from datetime import datetime
 from uuid import uuid4
 
-from .config import DB_PATH, match_threshold
+from .config import DB_PATH, face_box_iou_threshold, face_reconcile_threshold, match_threshold
 
 SCHEMA_VERSION = 3
 
@@ -121,8 +121,7 @@ def run_migrations(conn: sqlite3.Connection) -> None:
         migrate_legacy_files(conn)
     if version < 2:
         add_column_if_missing(conn, "ignored_faces", "ignored_tag", "text")
-    if version < 3:
-        add_column_if_missing(conn, "ignored_faces", "ignored_tag", "text")
+    if version != SCHEMA_VERSION:
         conn.execute(f"pragma user_version = {SCHEMA_VERSION}")
         conn.commit()
 
@@ -151,6 +150,7 @@ def migrate_legacy_files(conn: sqlite3.Connection) -> None:
             "place": {},
         }
         save_file(conn, record)
+    conn.commit()
 
 
 def table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
@@ -235,7 +235,8 @@ def list_faces(conn: sqlite3.Connection, photo_id: str) -> list[dict]:
         """
         select
             f.*,
-            p.name as tag
+            p.name as tag,
+            fp.source as tag_source
         from faces f
         left join face_people fp on fp.face_id = f.id
         left join people p on p.id = fp.person_id
@@ -258,6 +259,7 @@ def face_to_record(row: sqlite3.Row) -> dict:
         },
         "embedding": json.loads(row["embedding"] or "[]"),
         "tag": row["tag"] or "",
+        "tagSource": row["tag_source"] or "",
         "thumbnail": row["thumbnail"] or "",
     }
 
@@ -309,6 +311,7 @@ def save_file(conn: sqlite3.Connection, record: dict) -> None:
 
 
 def replace_faces(conn: sqlite3.Connection, photo_id: str, faces: list[dict], source: str) -> None:
+    # Callers own the transaction so delete/insert replacement stays atomic per photo.
     reconciled_faces = reconcile_faces(conn, photo_id, faces)
     conn.execute(
         "delete from face_people where face_id in (select id from faces where photo_id = ?)",
@@ -336,7 +339,7 @@ def replace_faces(conn: sqlite3.Connection, photo_id: str, faces: list[dict], so
             ),
         )
         if face.get("tag"):
-            set_face_tag(conn, face["id"], face["tag"], source=source)
+            set_face_tag(conn, face["id"], face["tag"], source=face.get("tagSource") or source)
 
 
 def filter_ignored_faces(conn: sqlite3.Connection, photo_id: str, faces: list[dict]) -> list[dict]:
@@ -364,7 +367,7 @@ def matches_ignored_face(face: dict, ignored: list[dict]) -> bool:
     for ignored_face in ignored:
         if embedding_similarity(face.get("embedding", []), ignored_face.get("embedding", [])) >= match_threshold():
             return True
-        if box_iou(face.get("box", {}), ignored_face.get("box", {})) >= 0.7:
+        if box_iou(face.get("box", {}), ignored_face.get("box", {})) >= face_box_iou_threshold():
             return True
     return False
 
@@ -435,8 +438,9 @@ def reconcile_faces(conn: sqlite3.Connection, photo_id: str, new_faces: list[dic
         if match:
             matched_old_ids.add(match["id"])
             face["id"] = match["id"]
-            if not face.get("tag") and match.get("tag"):
+            if match.get("tag") and match.get("tagSource") == "manual":
                 face["tag"] = match["tag"]
+                face["tagSource"] = "manual"
         else:
             face["id"] = f"face-{uuid4().hex}"
         reconciled.append(face)
@@ -459,7 +463,7 @@ def best_face_match(face: dict, candidates: list[dict], used_ids: set[str]) -> d
             best = candidate
             best_score = score
 
-    return best if best_score >= match_threshold() else None
+    return best if best_score >= face_reconcile_threshold() else None
 
 
 def embedding_similarity(a: list[float], b: list[float]) -> float:
@@ -596,6 +600,7 @@ def update_faces(conn: sqlite3.Connection, file_id: str, faces: list[dict]) -> N
 
 def clear_files(conn: sqlite3.Connection) -> None:
     # Delete order matters while foreign keys are enabled.
+    # Keep schema/user_version intact; this clears indexed content, not the database structure.
     conn.execute("delete from face_people")
     conn.execute("delete from ignored_faces")
     conn.execute("delete from people")

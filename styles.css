@@ -25,7 +25,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -256,6 +257,35 @@ aside {
   margin-bottom: 14px;
 }
 
+.gallery-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  margin: 0 0 14px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfa;
+}
+
+.gallery-toolbar label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.gallery-toolbar select,
+.gallery-toolbar input {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  padding: 0 10px;
+}
+
 .people-list {
   display: grid;
   gap: 8px;
@@ -299,6 +329,7 @@ aside {
   aspect-ratio: 4 / 3;
   background: #e9ede9;
   overflow: hidden;
+  cursor: zoom-in;
 }
 
 .media-wrap img,
@@ -404,6 +435,86 @@ aside {
   color: var(--warn);
 }
 
+.lightbox[hidden] {
+  display: none;
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 72px;
+  align-items: center;
+  background: rgba(10, 14, 13, 0.9);
+  padding: 28px;
+}
+
+.lightbox-frame {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  min-width: 0;
+  justify-items: center;
+}
+
+.lightbox-frame img {
+  max-width: 100%;
+  max-height: calc(100vh - 128px);
+  object-fit: contain;
+  border-radius: 8px;
+  background: #111;
+}
+
+.lightbox-frame figcaption {
+  display: grid;
+  gap: 4px;
+  color: #fff;
+  text-align: center;
+}
+
+.lightbox-frame span {
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 13px;
+}
+
+.lightbox-close,
+.lightbox-nav {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+  border-radius: 999px;
+  padding: 0;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.lightbox-nav {
+  width: 52px;
+  min-width: 52px;
+  height: 72px;
+  min-height: 72px;
+  border-radius: 999px;
+  padding: 0;
+  font-size: 52px;
+  line-height: 1;
+}
+
+.lightbox-nav:hover,
+.lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 @media (max-width: 860px) {
   .topbar,
   .control-band,
@@ -431,6 +542,16 @@ aside {
   .stats-grid,
   .workspace {
     grid-template-columns: 1fr;
+  }
+
+  .lightbox {
+    grid-template-columns: 48px minmax(0, 1fr) 48px;
+    padding: 16px;
+  }
+
+  .lightbox-nav {
+    width: 42px;
+    min-width: 42px;
   }
 
   aside {
