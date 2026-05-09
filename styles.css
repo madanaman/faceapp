@@ -318,7 +318,7 @@ aside {
 
 .photo-meta {
   display: grid;
-  gap: 3px;
+  gap: 6px;
   padding: 12px 12px 8px;
 }
 
@@ -336,6 +336,19 @@ aside {
   white-space: nowrap;
 }
 
+.photo-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.photo-actions button {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
 .faces {
   display: grid;
   gap: 8px;
@@ -344,7 +357,7 @@ aside {
 
 .face-chip {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-columns: 48px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
 }
@@ -362,6 +375,28 @@ aside {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 0 10px;
+}
+
+.remove-face {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  border-color: #b52a20;
+  border-radius: 999px;
+  background: #d7332a;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0;
+}
+
+.remove-face:hover {
+  background: #b92720;
+  border-color: #9d211b;
 }
 
 .warning {

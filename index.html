@@ -88,6 +88,10 @@
         <div class="photo-meta">
           <strong class="file-name"></strong>
           <span class="file-path"></span>
+          <div class="photo-actions">
+            <button class="rescan-photo" type="button">Rescan faces</button>
+            <button class="reset-ignored" type="button">Reset ignored</button>
+          </div>
         </div>
         <div class="faces"></div>
       </article>
@@ -97,6 +101,7 @@
       <div class="face-chip">
         <canvas width="96" height="96"></canvas>
         <input type="text" placeholder="Tag name">
+        <button class="remove-face" type="button" aria-label="Ignore this face" title="Ignore this face">−</button>
       </div>
     </template>
 
