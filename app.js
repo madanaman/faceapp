@@ -139,7 +139,8 @@ async function scanPath() {
     }
     els.folderLabel.textContent = path;
     const autoTagged = payload.autoTagged ? ` ${payload.autoTagged} faces auto-tagged.` : "";
-    setProgress(`Scan complete: ${payload.files.length} image files indexed.${autoTagged}`, 100);
+    const warningText = payload.warnings?.length ? ` ${payload.warnings.length} files warned/skipped.` : "";
+    setProgress(`Scan complete: ${payload.files.length} image files indexed.${autoTagged}${warningText}`, 100);
     showAll();
   } catch (error) {
     setProgress(error.message, 0);

@@ -1,19 +1,34 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import json
 import sqlite3
 from datetime import datetime
+from uuid import uuid4
 
-from .config import DB_PATH
+from .config import DB_PATH, match_threshold
+
+SCHEMA_VERSION = 1
 
 
 def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("pragma foreign_keys = on")
+    conn.execute("pragma busy_timeout = 5000")
+    conn.execute("pragma journal_mode = wal")
     ensure_schema(conn)
-    migrate_legacy_files(conn)
+    run_migrations(conn)
     return conn
+
+
+@contextmanager
+def connection():
+    conn = connect()
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
@@ -87,6 +102,14 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     )
 
 
+def run_migrations(conn: sqlite3.Connection) -> None:
+    version = conn.execute("pragma user_version").fetchone()[0]
+    if version < 1:
+        migrate_legacy_files(conn)
+        conn.execute(f"pragma user_version = {SCHEMA_VERSION}")
+        conn.commit()
+
+
 def migrate_legacy_files(conn: sqlite3.Connection) -> None:
     if not table_exists(conn, "files"):
         return
@@ -111,9 +134,6 @@ def migrate_legacy_files(conn: sqlite3.Connection) -> None:
             "place": {},
         }
         save_file(conn, record)
-    conn.commit()
-
-
 def table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
     return bool(
         conn.execute(
@@ -263,13 +283,14 @@ def save_file(conn: sqlite3.Connection, record: dict) -> None:
 
 
 def replace_faces(conn: sqlite3.Connection, photo_id: str, faces: list[dict], source: str) -> None:
+    reconciled_faces = reconcile_faces(conn, photo_id, faces)
     conn.execute(
         "delete from face_people where face_id in (select id from faces where photo_id = ?)",
         (photo_id,),
     )
     conn.execute("delete from faces where photo_id = ?", (photo_id,))
 
-    for face in faces:
+    for face in reconciled_faces:
         box = face["box"]
         conn.execute(
             """
@@ -290,6 +311,49 @@ def replace_faces(conn: sqlite3.Connection, photo_id: str, faces: list[dict], so
         )
         if face.get("tag"):
             set_face_tag(conn, face["id"], face["tag"], source=source)
+
+
+def reconcile_faces(conn: sqlite3.Connection, photo_id: str, new_faces: list[dict]) -> list[dict]:
+    old_faces = list_faces(conn, photo_id)
+    matched_old_ids = set()
+    reconciled = []
+
+    for face in new_faces:
+        match = best_face_match(face, old_faces, matched_old_ids)
+        if match:
+            matched_old_ids.add(match["id"])
+            face["id"] = match["id"]
+            if not face.get("tag") and match.get("tag"):
+                face["tag"] = match["tag"]
+        else:
+            face["id"] = f"face-{uuid4().hex}"
+        reconciled.append(face)
+
+    return reconciled
+
+
+def best_face_match(face: dict, candidates: list[dict], used_ids: set[str]) -> dict | None:
+    embedding = face.get("embedding", [])
+    if not embedding:
+        return None
+
+    best = None
+    best_score = 0.0
+    for candidate in candidates:
+        if candidate["id"] in used_ids:
+            continue
+        score = embedding_similarity(embedding, candidate.get("embedding", []))
+        if score > best_score:
+            best = candidate
+            best_score = score
+
+    return best if best_score >= match_threshold() else None
+
+
+def embedding_similarity(a: list[float], b: list[float]) -> float:
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    return sum(x * y for x, y in zip(a, b))
 
 
 def save_metadata(conn: sqlite3.Connection, photo_id: str, metadata: dict) -> None:
@@ -419,6 +483,7 @@ def update_faces(conn: sqlite3.Connection, file_id: str, faces: list[dict]) -> N
 
 
 def clear_files(conn: sqlite3.Connection) -> None:
+    # Delete order matters while foreign keys are enabled.
     conn.execute("delete from face_people")
     conn.execute("delete from people")
     conn.execute("delete from faces")

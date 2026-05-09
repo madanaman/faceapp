@@ -92,11 +92,11 @@ def detect_faces(path: Path) -> dict:
         y2 = max(0.0, min(y2, float(height)))
         faces.append(
             {
-                "id": f"{path.name}-{index}-{int(x1)}-{int(y1)}",
+                "id": f"candidate-{index}",
                 "box": {"x": x1, "y": y1, "width": x2 - x1, "height": y2 - y1},
                 "embedding": [float(value) for value in getattr(face, "normed_embedding", [])],
                 "tag": "",
-                "thumbnail": "",
+                "thumbnail": "",  # Keep future thumbnails as file paths, not base64 blobs.
             }
         )
     return {"width": width, "height": height, "faces": faces}

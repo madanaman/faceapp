@@ -23,16 +23,12 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
             self.send_json(health_payload())
             return
         if parsed.path == "/api/files":
-            conn = database.connect()
-            try:
+            with database.connection() as conn:
                 self.send_json(database.list_files(conn))
-            finally:
-                conn.close()
             return
         if parsed.path == "/api/search":
             params = parse_qs(parsed.query)
-            conn = database.connect()
-            try:
+            with database.connection() as conn:
                 try:
                     self.send_json(
                         database.search_files(
@@ -43,8 +39,6 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
                     )
                 except ValueError as exc:
                     self.send_json({"ok": False, "error": str(exc)}, status=400)
-            finally:
-                conn.close()
             return
         if parsed.path == "/api/media":
             params = parse_qs(parsed.query)
@@ -80,16 +74,14 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
             face_id=payload["faceId"],
             tag=payload.get("tag", ""),
         )
-        self.send_json(result, status=result.pop("status", 200))
+        status = result.pop("status", 200)
+        self.send_json(result, status=status)
 
     def handle_clear(self) -> None:
-        conn = database.connect()
-        try:
-            database.clear_files(conn)
-            conn.commit()
+        with database.connection() as conn:
+            with conn:
+                database.clear_files(conn)
             self.send_json({"ok": True})
-        finally:
-            conn.close()
 
     def read_json(self) -> dict:
         length = int(self.headers.get("content-length", "0"))
