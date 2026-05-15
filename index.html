@@ -82,6 +82,26 @@
       </section>
     </main>
 
+    <div id="lightbox" class="lightbox" aria-hidden="true">
+      <button id="lightboxClose" class="lightbox-close" type="button" aria-label="Close enlarged photo">x</button>
+      <button id="lightboxPrev" class="lightbox-nav lightbox-prev" type="button" aria-label="Previous photo">&lt;</button>
+      <figure class="lightbox-frame">
+        <img id="lightboxImage" alt="">
+        <figcaption>
+          <strong id="lightboxName"></strong>
+          <span id="lightboxMeta"></span>
+        </figcaption>
+      </figure>
+      <button id="lightboxNext" class="lightbox-nav lightbox-next" type="button" aria-label="Next photo">&gt;</button>
+    </div>
+
+    <div id="busyOverlay" class="busy-overlay" aria-hidden="true" role="status">
+      <div class="busy-panel">
+        <span class="busy-spinner"></span>
+        <strong id="busyText">Applying changes...</strong>
+      </div>
+    </div>
+
     <template id="photoTemplate">
       <article class="photo-card">
         <div class="media-wrap"></div>
@@ -96,9 +116,12 @@
     <template id="faceTemplate">
       <div class="face-chip">
         <canvas width="96" height="96"></canvas>
-        <input type="text" placeholder="Tag name">
+        <input type="text" placeholder="Tag name" list="personSuggestions">
+        <button type="button" class="remove-face-btn" aria-label="Remove face" title="Remove face">-</button>
       </div>
     </template>
+
+    <datalist id="personSuggestions"></datalist>
 
     <script src="./app.js" type="module"></script>
   </body>

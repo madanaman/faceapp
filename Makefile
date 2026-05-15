@@ -8,3 +8,4 @@ run:
 check:
 	$(PYTHON_BIN) -m py_compile server.py backend/*.py
 	node --check app.js
+	node --test tests/*.test.mjs

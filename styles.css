@@ -259,6 +259,29 @@ aside {
 .people-list {
   display: grid;
   gap: 8px;
+  max-height: min(520px, calc(100vh - 220px));
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-color: #9bb2aa transparent;
+  scrollbar-width: thin;
+}
+
+.people-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+.people-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.people-list::-webkit-scrollbar-thumb {
+  border: 3px solid var(--panel);
+  border-radius: 999px;
+  background: #9bb2aa;
+}
+
+.people-list::-webkit-scrollbar-thumb:hover {
+  background: #71877f;
 }
 
 .person-button {
@@ -276,6 +299,14 @@ aside {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 14px;
+}
+
+.gallery-sentinel {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 18px;
+  text-align: center;
 }
 
 .empty {
@@ -344,7 +375,7 @@ aside {
 
 .face-chip {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-columns: 48px minmax(0, 1fr) 32px;
   gap: 8px;
   align-items: center;
 }
@@ -362,6 +393,149 @@ aside {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 0 10px;
+}
+
+.remove-face-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: #d32f2f;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0;
+}
+
+.remove-face-btn:hover {
+  background: #a91f1f;
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: rgba(8, 13, 12, 0.86);
+}
+
+.lightbox.open {
+  display: flex;
+}
+
+.lightbox-active {
+  overflow: hidden;
+}
+
+.lightbox-frame {
+  display: grid;
+  gap: 12px;
+  width: min(1100px, 100%);
+  margin: 0;
+}
+
+.lightbox-frame img {
+  width: 100%;
+  max-height: 82vh;
+  border-radius: 8px;
+  object-fit: contain;
+  background: #0d1110;
+}
+
+.lightbox-frame figcaption {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: #fff;
+  font-size: 14px;
+}
+
+.lightbox-frame span {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.lightbox-close,
+.lightbox-nav {
+  position: absolute;
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  min-height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 22px;
+  padding: 0;
+}
+
+.lightbox-close:hover,
+.lightbox-nav:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.lightbox-close {
+  top: 20px;
+  right: 20px;
+}
+
+.lightbox-prev {
+  left: 20px;
+}
+
+.lightbox-next {
+  right: 20px;
+}
+
+.busy-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(246, 247, 244, 0.62);
+  backdrop-filter: blur(4px);
+}
+
+.busy-overlay.open {
+  display: flex;
+}
+
+.busy-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 220px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+}
+
+.busy-spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid var(--accent-soft);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .warning {
@@ -400,5 +574,18 @@ aside {
 
   aside {
     position: static;
+  }
+
+  .people-list {
+    max-height: 260px;
+  }
+
+  .lightbox {
+    padding: 18px;
+  }
+
+  .lightbox-nav {
+    top: auto;
+    bottom: 18px;
   }
 }

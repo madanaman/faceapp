@@ -1,12 +1,17 @@
 const DB_NAME = "local-face-library";
 const DB_VERSION = 1;
 const STORE = "files";
+const GALLERY_BATCH_SIZE = 50;
 const VIDEO_TYPES = new Set(["video/mp4", "video/webm", "video/quicktime"]);
 
 const state = {
   db: null,
   files: new Map(),
   filteredIds: [],
+  galleryCursor: 0,
+  galleryObserver: null,
+  lightboxIndex: 0,
+  currentSearchTerms: [],
   objectUrls: new Map(),
   support: {
     backend: false,
@@ -33,9 +38,19 @@ const els = {
   progressPercent: document.querySelector("#progressPercent"),
   scanProgress: document.querySelector("#scanProgress"),
   peopleList: document.querySelector("#peopleList"),
+  personSuggestions: document.querySelector("#personSuggestions"),
   gallery: document.querySelector("#gallery"),
   galleryTitle: document.querySelector("#galleryTitle"),
   galleryHint: document.querySelector("#galleryHint"),
+  lightbox: document.querySelector("#lightbox"),
+  lightboxImage: document.querySelector("#lightboxImage"),
+  lightboxName: document.querySelector("#lightboxName"),
+  lightboxMeta: document.querySelector("#lightboxMeta"),
+  lightboxClose: document.querySelector("#lightboxClose"),
+  lightboxPrev: document.querySelector("#lightboxPrev"),
+  lightboxNext: document.querySelector("#lightboxNext"),
+  busyOverlay: document.querySelector("#busyOverlay"),
+  busyText: document.querySelector("#busyText"),
   photoTemplate: document.querySelector("#photoTemplate"),
   faceTemplate: document.querySelector("#faceTemplate"),
 };
@@ -62,8 +77,35 @@ function bindEvents() {
   els.searchBtn.addEventListener("click", search);
   els.showAllBtn.addEventListener("click", showAll);
   els.untaggedBtn.addEventListener("click", showUntagged);
+  els.lightboxClose.addEventListener("click", closeLightbox);
+  els.lightboxPrev.addEventListener("click", () => stepLightbox(-1));
+  els.lightboxNext.addEventListener("click", () => stepLightbox(1));
+  els.lightbox.addEventListener("click", (event) => {
+    if (event.target === els.lightbox) closeLightbox();
+  });
+  document.addEventListener("keydown", handleLightboxKeys);
   els.searchInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") search();
+  });
+  setupGalleryPaging();
+}
+
+function setupGalleryPaging() {
+  if ("IntersectionObserver" in window) {
+    state.galleryObserver = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          appendGalleryBatch();
+        }
+      },
+      { rootMargin: "700px 0px" },
+    );
+    return;
+  }
+
+  window.addEventListener("scroll", () => {
+    const nearBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 700;
+    if (nearBottom) appendGalleryBatch();
   });
 }
 
@@ -156,10 +198,18 @@ function squareCrop(box, width, height) {
   return { x, y, size };
 }
 
-function renderGallery(ids, title = "Matches", hint = "Search uses AND matching for multiple names.") {
+function renderGallery(
+  ids,
+  title = "Matches",
+  hint = "Search uses AND matching for multiple names.",
+  initialBatchSize = GALLERY_BATCH_SIZE,
+) {
+  state.filteredIds = ids;
+  state.galleryCursor = 0;
   els.galleryTitle.textContent = title;
   els.galleryHint.textContent = hint;
   els.matchCount.textContent = ids.length;
+  state.galleryObserver?.disconnect();
   els.gallery.replaceChildren();
 
   if (!ids.length) {
@@ -173,13 +223,34 @@ function renderGallery(ids, title = "Matches", hint = "Search uses AND matching 
     return;
   }
 
-  for (const id of ids) {
+  appendGalleryBatch(initialBatchSize);
+  updateStats();
+}
+
+function appendGalleryBatch(batchSize = GALLERY_BATCH_SIZE) {
+  if (state.galleryCursor >= state.filteredIds.length) return;
+
+  els.gallery.querySelector(".gallery-sentinel")?.remove();
+  const fragment = document.createDocumentFragment();
+  const nextCursor = Math.min(state.galleryCursor + batchSize, state.filteredIds.length);
+
+  for (const id of state.filteredIds.slice(state.galleryCursor, nextCursor)) {
     const fileRecord = state.files.get(id);
     if (!fileRecord) continue;
-    els.gallery.append(renderPhoto(fileRecord));
+    if (!fileMatchesPeopleSearch(fileRecord, state.currentSearchTerms)) continue;
+    fragment.append(renderPhoto(fileRecord));
   }
 
-  updateStats();
+  state.galleryCursor = nextCursor;
+  els.gallery.append(fragment);
+
+  if (state.galleryCursor < state.filteredIds.length) {
+    const sentinel = document.createElement("div");
+    sentinel.className = "gallery-sentinel";
+    sentinel.textContent = `Loading ${Math.min(GALLERY_BATCH_SIZE, state.filteredIds.length - state.galleryCursor)} more photos...`;
+    els.gallery.append(sentinel);
+    state.galleryObserver?.observe(sentinel);
+  }
 }
 
 function renderPhoto(fileRecord) {
@@ -196,6 +267,7 @@ function renderPhoto(fileRecord) {
 
   const media = createMediaElement(fileRecord);
   mediaWrap.append(media);
+  mediaWrap.addEventListener("click", () => openLightbox(fileRecord.id));
 
   for (const face of fileRecord.faces) {
     mediaWrap.append(renderFaceBox(face, fileRecord));
@@ -210,6 +282,46 @@ function renderPhoto(fileRecord) {
   }
 
   return card;
+}
+
+function openLightbox(fileId) {
+  const index = state.filteredIds.indexOf(fileId);
+  if (index < 0) return;
+
+  state.lightboxIndex = index;
+  renderLightbox();
+  els.lightbox.classList.add("open");
+  els.lightbox.setAttribute("aria-hidden", "false");
+  document.body.classList.add("lightbox-active");
+}
+
+function closeLightbox() {
+  els.lightbox.classList.remove("open");
+  els.lightbox.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("lightbox-active");
+}
+
+function stepLightbox(direction) {
+  if (!state.filteredIds.length) return;
+  state.lightboxIndex = (state.lightboxIndex + direction + state.filteredIds.length) % state.filteredIds.length;
+  renderLightbox();
+}
+
+function renderLightbox() {
+  const fileRecord = state.files.get(state.filteredIds[state.lightboxIndex]);
+  if (!fileRecord) return;
+
+  els.lightboxImage.src = getObjectUrl(fileRecord);
+  els.lightboxImage.alt = fileRecord.name;
+  els.lightboxName.textContent = fileRecord.name;
+  els.lightboxMeta.textContent = `${state.lightboxIndex + 1} of ${state.filteredIds.length}`;
+}
+
+function handleLightboxKeys(event) {
+  if (!els.lightbox.classList.contains("open")) return;
+  if (event.key === "Escape") closeLightbox();
+  if (event.key === "ArrowLeft") stepLightbox(-1);
+  if (event.key === "ArrowRight") stepLightbox(1);
 }
 
 function createMediaElement(fileRecord) {
@@ -259,21 +371,66 @@ function renderFaceEditor(fileRecord, face) {
   const chip = fragment.querySelector(".face-chip");
   const canvas = fragment.querySelector("canvas");
   const input = fragment.querySelector("input");
+  const removeButton = fragment.querySelector(".remove-face-btn");
   const image = new Image();
 
   input.value = face.tag || "";
   input.addEventListener("change", async () => {
     face.tag = input.value.trim();
     face.__changed = true;
-    await saveFile(fileRecord);
-    updateStats();
-    renderPeople();
+    try {
+      setBusy(true, "Applying tag...");
+      await saveFile(fileRecord);
+      updateStats();
+      renderPeople();
+    } finally {
+      setBusy(false);
+    }
   });
+  removeButton.addEventListener("click", () => removeFace(fileRecord, face));
 
   image.onload = () => drawFaceCrop(canvas, image, face, fileRecord);
   image.src = face.thumbnail || getObjectUrl(fileRecord);
 
   return chip;
+}
+
+async function removeFace(fileRecord, face) {
+  if (face.tag && !confirm(`Remove face tagged "${face.tag}"?`)) return;
+
+  const scrollTop = window.scrollY;
+  const loadedCardCount = Math.max(state.galleryCursor, GALLERY_BATCH_SIZE);
+  try {
+    setBusy(true, "Removing face box...");
+    if (state.support.backend) {
+      const response = await fetch("/api/ignore-face", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileId: fileRecord.id, faceId: face.id }),
+      });
+      const payload = await response.json();
+      if (!payload.ok) throw new Error(payload.error || "Could not remove face.");
+      state.files.clear();
+      for (const record of payload.files || []) {
+        state.files.set(record.id, record);
+      }
+    } else {
+      fileRecord.faces = fileRecord.faces.filter((candidate) => candidate.id !== face.id);
+      await saveFile(fileRecord);
+    }
+    setProgress("Face box removed. It will stay hidden on future scans.", 100);
+    renderGallery(
+      state.filteredIds.filter((id) => state.files.has(id)),
+      els.galleryTitle.textContent,
+      els.galleryHint.textContent,
+      loadedCardCount,
+    );
+    window.scrollTo({ top: scrollTop });
+  } catch (error) {
+    setProgress(error.message, 0);
+  } finally {
+    setBusy(false);
+  }
 }
 
 function drawFaceCrop(canvas, image, face, fileRecord) {
@@ -306,30 +463,35 @@ function search() {
   }
 
   const ids = [...state.files.values()]
-    .filter((fileRecord) => {
-      const tags = new Set(fileRecord.faces.map((face) => normalizeName(face.tag)).filter(Boolean));
-      return terms.every((term) => tags.has(term));
-    })
+    .filter((fileRecord) => fileMatchesPeopleSearch(fileRecord, terms))
     .map((fileRecord) => fileRecord.id);
 
+  state.currentSearchTerms = terms;
   renderGallery(ids, `Search: ${terms.join(" + ")}`, "Multiple names require every person to appear in the same file.");
 }
 
 function showAll() {
+  state.currentSearchTerms = [];
   state.filteredIds = [...state.files.keys()];
   renderGallery(state.filteredIds, "All Indexed Files");
 }
 
 function showUntagged() {
+  state.currentSearchTerms = [];
   const ids = [...state.files.values()]
     .filter((fileRecord) => fileRecord.faces.some((face) => !normalizeName(face.tag)))
     .map((fileRecord) => fileRecord.id);
   renderGallery(ids, "Untagged Faces", "Tag the cropped faces, then search by one name or several names.");
 }
 
+function fileMatchesPeopleSearch(fileRecord, terms) {
+  if (!terms.length) return true;
+  const tags = new Set((fileRecord.faces || []).map((face) => normalizeName(face.tag)).filter(Boolean));
+  return terms.every((term) => tags.has(term));
+}
+
 function parseSearch(value) {
-  const raw = value.includes(",") ? value.split(",") : value.split(/\s+/);
-  return raw.map(normalizeName).filter(Boolean);
+  return value.split(",").map(normalizeName).filter(Boolean);
 }
 
 function renderPeople() {
@@ -343,6 +505,7 @@ function renderPeople() {
   }
 
   els.peopleList.replaceChildren();
+  renderPersonSuggestions([...counts.keys()]);
   if (!counts.size) {
     const empty = document.createElement("div");
     empty.className = "empty";
@@ -367,6 +530,18 @@ function renderPeople() {
     });
 }
 
+function renderPersonSuggestions(names) {
+  els.personSuggestions.replaceChildren(
+    ...names
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => {
+        const option = document.createElement("option");
+        option.value = name;
+        return option;
+      }),
+  );
+}
+
 function updateStats() {
   const files = [...state.files.values()];
   const faces = files.flatMap((fileRecord) => fileRecord.faces);
@@ -381,6 +556,12 @@ function setProgress(text, percent) {
   els.progressText.textContent = text;
   els.progressPercent.textContent = `${percent}%`;
   els.scanProgress.value = percent;
+}
+
+function setBusy(isBusy, text = "Applying changes...") {
+  els.busyText.textContent = text;
+  els.busyOverlay.classList.toggle("open", isBusy);
+  els.busyOverlay.setAttribute("aria-hidden", String(!isBusy));
 }
 
 async function openDb() {
