@@ -24,9 +24,9 @@ test("person search keeps spaces inside names and uses commas for multiple names
 });
 
 test("people search excludes records with no matching tagged faces at search and render time", () => {
-  assert.match(appJs, /function fileMatchesPeopleSearch\(/);
-  assert.match(appJs, /\.filter\(\(fileRecord\) => fileMatchesPeopleSearch\(fileRecord, terms\)\)/);
-  assert.match(appJs, /if \(!fileMatchesPeopleSearch\(fileRecord, state\.currentSearchTerms\)\) continue/);
+  assert.match(appJs, /function matchesPeople\(/);
+  assert.match(appJs, /\.filter\(\(fileRecord\) => matchesPeople\(fileRecord, terms\)\)/);
+  assert.match(appJs, /if \(!matchesPeople\(fileRecord, state\.currentView\.terms \|\| \[\]\)\) continue/);
   assert.match(appJs, /fileRecord\.faces \|\| \[\]/);
 });
 
@@ -54,4 +54,16 @@ test("tagging and face removal show a busy overlay while changes apply", () => {
   assert.match(appJs, /setBusy\(true, "Applying tag\.\.\."\)/);
   assert.match(appJs, /setBusy\(true, "Removing face box\.\.\."\)/);
   assert.match(appJs, /setBusy\(false\)/);
+});
+
+test("gallery date filters and per-photo rescan controls stay wired", () => {
+  assert.match(html, /id="yearFilter"/);
+  assert.match(html, /id="monthFilter"/);
+  assert.match(html, /id="dateFilter"/);
+  assert.match(html, /id="sortDirection"/);
+  assert.match(html, /class="rescan-photo"/);
+  assert.match(html, /class="reset-ignored"/);
+  assert.match(appJs, /function renderCurrentView\(/);
+  assert.match(appJs, /function matchesDateFilters\(/);
+  assert.match(appJs, /function rescanPhoto\(/);
 });

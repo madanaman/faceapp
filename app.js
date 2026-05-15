@@ -11,7 +11,7 @@ const state = {
   galleryCursor: 0,
   galleryObserver: null,
   lightboxIndex: 0,
-  currentSearchTerms: [],
+  currentView: { type: "all", title: "All Indexed Files", hint: "Search uses AND matching for multiple names.", terms: [] },
   objectUrls: new Map(),
   support: {
     backend: false,
@@ -42,6 +42,10 @@ const els = {
   gallery: document.querySelector("#gallery"),
   galleryTitle: document.querySelector("#galleryTitle"),
   galleryHint: document.querySelector("#galleryHint"),
+  yearFilter: document.querySelector("#yearFilter"),
+  monthFilter: document.querySelector("#monthFilter"),
+  dateFilter: document.querySelector("#dateFilter"),
+  sortDirection: document.querySelector("#sortDirection"),
   lightbox: document.querySelector("#lightbox"),
   lightboxImage: document.querySelector("#lightboxImage"),
   lightboxName: document.querySelector("#lightboxName"),
@@ -77,6 +81,10 @@ function bindEvents() {
   els.searchBtn.addEventListener("click", search);
   els.showAllBtn.addEventListener("click", showAll);
   els.untaggedBtn.addEventListener("click", showUntagged);
+  els.yearFilter.addEventListener("change", renderCurrentView);
+  els.monthFilter.addEventListener("change", renderCurrentView);
+  els.dateFilter.addEventListener("change", renderCurrentView);
+  els.sortDirection.addEventListener("change", renderCurrentView);
   els.lightboxClose.addEventListener("click", closeLightbox);
   els.lightboxPrev.addEventListener("click", () => stepLightbox(-1));
   els.lightboxNext.addEventListener("click", () => stepLightbox(1));
@@ -153,6 +161,7 @@ async function restoreBackendIndex() {
   for (const record of records) {
     state.files.set(record.id, record);
   }
+  populateYearFilter();
   if (records.length) {
     els.progressText.textContent = "Saved server index restored.";
   }
@@ -179,6 +188,7 @@ async function scanPath() {
     for (const record of payload.files) {
       state.files.set(record.id, record);
     }
+    populateYearFilter();
     els.folderLabel.textContent = path;
     const autoTagged = payload.autoTagged ? ` ${payload.autoTagged} faces auto-tagged.` : "";
     const warningText = payload.warnings?.length ? ` ${payload.warnings.length} files warned/skipped.` : "";
@@ -237,7 +247,7 @@ function appendGalleryBatch(batchSize = GALLERY_BATCH_SIZE) {
   for (const id of state.filteredIds.slice(state.galleryCursor, nextCursor)) {
     const fileRecord = state.files.get(id);
     if (!fileRecord) continue;
-    if (!fileMatchesPeopleSearch(fileRecord, state.currentSearchTerms)) continue;
+    if (!matchesPeople(fileRecord, state.currentView.terms || [])) continue;
     fragment.append(renderPhoto(fileRecord));
   }
 
@@ -253,6 +263,20 @@ function appendGalleryBatch(batchSize = GALLERY_BATCH_SIZE) {
   }
 }
 
+function renderCurrentView({ preserveScroll = false } = {}) {
+  const scrollY = window.scrollY;
+  if (state.currentView.type === "untagged") {
+    showUntagged();
+  } else if (state.currentView.type === "search") {
+    search();
+  } else {
+    applyGalleryFilters();
+  }
+  if (preserveScroll) {
+    requestAnimationFrame(() => window.scrollTo({ top: scrollY }));
+  }
+}
+
 function renderPhoto(fileRecord) {
   const fragment = els.photoTemplate.content.cloneNode(true);
   const card = fragment.querySelector(".photo-card");
@@ -260,16 +284,27 @@ function renderPhoto(fileRecord) {
   const name = fragment.querySelector(".file-name");
   const path = fragment.querySelector(".file-path");
   const faces = fragment.querySelector(".faces");
+  const rescanButton = fragment.querySelector(".rescan-photo");
+  const resetIgnoredButton = fragment.querySelector(".reset-ignored");
 
   name.textContent = fileRecord.name;
   path.textContent = fileRecord.path;
+  if (rescanButton) {
+    rescanButton.addEventListener("click", () => rescanPhoto(fileRecord, false, rescanButton));
+  }
+  if (resetIgnoredButton) {
+    resetIgnoredButton.addEventListener("click", () => {
+      if (!confirm("Bring back ignored faces for this photo and rescan it?")) return;
+      rescanPhoto(fileRecord, true, resetIgnoredButton);
+    });
+  }
   mediaWrap.style.aspectRatio = `${fileRecord.width || 4} / ${fileRecord.height || 3}`;
 
   const media = createMediaElement(fileRecord);
   mediaWrap.append(media);
   mediaWrap.addEventListener("click", () => openLightbox(fileRecord.id));
 
-  for (const face of fileRecord.faces) {
+  for (const face of sortedFaces(fileRecord.faces)) {
     mediaWrap.append(renderFaceBox(face, fileRecord));
     faces.append(renderFaceEditor(fileRecord, face));
   }
@@ -282,6 +317,17 @@ function renderPhoto(fileRecord) {
   }
 
   return card;
+}
+
+function sortedFaces(faces) {
+  return [...faces].sort((a, b) => {
+    const aTag = normalizeName(a.tag);
+    const bTag = normalizeName(b.tag);
+    if (aTag && !bTag) return -1;
+    if (!aTag && bTag) return 1;
+    if (aTag || bTag) return aTag.localeCompare(bTag);
+    return a.id.localeCompare(b.id);
+  });
 }
 
 function openLightbox(fileId) {
@@ -314,7 +360,9 @@ function renderLightbox() {
   els.lightboxImage.src = getObjectUrl(fileRecord);
   els.lightboxImage.alt = fileRecord.name;
   els.lightboxName.textContent = fileRecord.name;
-  els.lightboxMeta.textContent = `${state.lightboxIndex + 1} of ${state.filteredIds.length}`;
+  const people = [...new Set(fileRecord.faces.map((face) => face.tag).filter(Boolean))].sort();
+  const date = photoTakenDate(fileRecord)?.slice(0, 10) || "Date unknown";
+  els.lightboxMeta.textContent = `${state.lightboxIndex + 1} of ${state.filteredIds.length} · ${date}${people.length ? ` · ${people.join(", ")}` : ""}`;
 }
 
 function handleLightboxKeys(event) {
@@ -371,8 +419,19 @@ function renderFaceEditor(fileRecord, face) {
   const chip = fragment.querySelector(".face-chip");
   const canvas = fragment.querySelector("canvas");
   const input = fragment.querySelector("input");
-  const removeButton = fragment.querySelector(".remove-face-btn");
+  let removeButton = fragment.querySelector(".remove-face-btn") || fragment.querySelector(".remove-face");
   const image = new Image();
+
+  if (!removeButton) {
+    removeButton = document.createElement("button");
+    removeButton.className = "remove-face-btn";
+    removeButton.type = "button";
+    removeButton.setAttribute("aria-label", "Remove face");
+    removeButton.title = "Remove face";
+    removeButton.textContent = "−";
+    chip.append(removeButton);
+  }
+  removeButton.textContent = "−";
 
   input.value = face.tag || "";
   input.addEventListener("change", async () => {
@@ -402,23 +461,7 @@ async function removeFace(fileRecord, face) {
   const loadedCardCount = Math.max(state.galleryCursor, GALLERY_BATCH_SIZE);
   try {
     setBusy(true, "Removing face box...");
-    if (state.support.backend) {
-      const response = await fetch("/api/ignore-face", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ fileId: fileRecord.id, faceId: face.id }),
-      });
-      const payload = await response.json();
-      if (!payload.ok) throw new Error(payload.error || "Could not remove face.");
-      state.files.clear();
-      for (const record of payload.files || []) {
-        state.files.set(record.id, record);
-      }
-    } else {
-      fileRecord.faces = fileRecord.faces.filter((candidate) => candidate.id !== face.id);
-      await saveFile(fileRecord);
-    }
-    setProgress("Face box removed. It will stay hidden on future scans.", 100);
+    await ignoreFace(fileRecord, face);
     renderGallery(
       state.filteredIds.filter((id) => state.files.has(id)),
       els.galleryTitle.textContent,
@@ -457,37 +500,98 @@ function drawFaceCrop(canvas, image, face, fileRecord) {
 
 function search() {
   const terms = parseSearch(els.searchInput.value);
-  if (!terms.length) {
-    showAll();
-    return;
-  }
+  state.currentView = {
+    type: terms.length ? "search" : "all",
+    title: terms.length ? `Search: ${terms.join(" + ")}` : "All Indexed Files",
+    hint: terms.length
+      ? "Multiple names require every person to appear in the same file."
+      : "Search uses AND matching for multiple names.",
+    terms,
+  };
+  applyGalleryFilters();
+}
 
+function applyGalleryFilters() {
+  const terms = state.currentView.terms || [];
   const ids = [...state.files.values()]
-    .filter((fileRecord) => fileMatchesPeopleSearch(fileRecord, terms))
+    .filter((fileRecord) => matchesPeople(fileRecord, terms))
+    .filter(matchesDateFilters)
+    .sort(comparePhotos)
     .map((fileRecord) => fileRecord.id);
 
-  state.currentSearchTerms = terms;
-  renderGallery(ids, `Search: ${terms.join(" + ")}`, "Multiple names require every person to appear in the same file.");
+  renderGallery(ids, state.currentView.title, state.currentView.hint);
 }
 
 function showAll() {
-  state.currentSearchTerms = [];
-  state.filteredIds = [...state.files.keys()];
-  renderGallery(state.filteredIds, "All Indexed Files");
+  els.searchInput.value = "";
+  els.yearFilter.value = "";
+  els.monthFilter.value = "";
+  els.dateFilter.value = "";
+  state.currentView = { type: "all", title: "All Indexed Files", hint: "Search uses AND matching for multiple names.", terms: [] };
+  applyGalleryFilters();
 }
 
 function showUntagged() {
-  state.currentSearchTerms = [];
+  state.currentView = {
+    type: "untagged",
+    title: "Untagged Faces",
+    hint: "Tag the cropped faces, then search by one name or several names.",
+    terms: [],
+  };
   const ids = [...state.files.values()]
     .filter((fileRecord) => fileRecord.faces.some((face) => !normalizeName(face.tag)))
+    .filter(matchesDateFilters)
+    .sort(comparePhotos)
     .map((fileRecord) => fileRecord.id);
-  renderGallery(ids, "Untagged Faces", "Tag the cropped faces, then search by one name or several names.");
+  renderGallery(ids, state.currentView.title, state.currentView.hint);
 }
 
-function fileMatchesPeopleSearch(fileRecord, terms) {
+function matchesPeople(fileRecord, terms) {
   if (!terms.length) return true;
   const tags = new Set((fileRecord.faces || []).map((face) => normalizeName(face.tag)).filter(Boolean));
   return terms.every((term) => tags.has(term));
+}
+
+function matchesDateFilters(fileRecord) {
+  const taken = photoTakenDate(fileRecord);
+  const exactDate = els.dateFilter.value;
+  const year = els.yearFilter.value;
+  const month = els.monthFilter.value;
+  if (exactDate) return taken?.slice(0, 10) === exactDate;
+  if (year && taken?.slice(0, 4) !== year) return false;
+  if (month && taken?.slice(5, 7) !== month) return false;
+  return true;
+}
+
+function comparePhotos(a, b) {
+  const direction = els.sortDirection.value === "asc" ? 1 : -1;
+  const aKey = photoSortKey(a);
+  const bKey = photoSortKey(b);
+  if (aKey === bKey) return a.name.localeCompare(b.name);
+  return aKey > bKey ? direction : -direction;
+}
+
+function photoSortKey(fileRecord) {
+  return photoTakenDate(fileRecord) || fileRecord.name || "";
+}
+
+function photoTakenDate(fileRecord) {
+  return fileRecord.metadata?.taken_at || "";
+}
+
+function populateYearFilter() {
+  const current = els.yearFilter.value;
+  const years = [...new Set([...state.files.values()]
+    .map((fileRecord) => photoTakenDate(fileRecord)?.slice(0, 4))
+    .filter(Boolean))]
+    .sort((a, b) => b.localeCompare(a));
+  els.yearFilter.replaceChildren(new Option("Any", ""));
+  for (const year of years) {
+    els.yearFilter.append(new Option(year, year));
+  }
+  if (years.includes(current)) {
+    els.yearFilter.value = current;
+  }
 }
 
 function parseSearch(value) {
@@ -580,6 +684,7 @@ async function restoreIndex() {
   for (const fileRecord of files) {
     state.files.set(fileRecord.id, fileRecord);
   }
+  populateYearFilter();
   if (files.length) {
     els.progressText.textContent = "Saved tag index restored. Choose the same folder to display local files.";
   }
@@ -610,9 +715,11 @@ async function saveFile(fileRecord) {
         for (const record of payload.files) {
           state.files.set(record.id, record);
         }
+        populateYearFilter();
         if (payload.propagated) {
           setProgress(`Tagged ${payload.propagated + 1} matching faces.`, 100);
         }
+        renderCurrentView({ preserveScroll: true });
       }
     }
     return;
@@ -656,6 +763,57 @@ async function clearIndex() {
     };
     request.onerror = () => reject(request.error);
   });
+}
+
+async function ignoreFace(fileRecord, face) {
+  if (!state.support.backend) {
+    fileRecord.faces = fileRecord.faces.filter((candidate) => candidate.id !== face.id);
+    await saveFile(fileRecord);
+    setProgress("Face box removed. It will stay hidden on future scans.", 100);
+    return;
+  }
+
+  const response = await fetch("/api/ignore-face", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ fileId: fileRecord.id, faceId: face.id }),
+  });
+  const payload = await response.json();
+  if (!payload.ok) throw new Error(payload.error || "Could not remove face.");
+
+  state.files.clear();
+  for (const record of payload.files || []) {
+    state.files.set(record.id, record);
+  }
+  populateYearFilter();
+  setProgress("Face box removed. It will stay hidden on future scans.", 100);
+}
+
+async function rescanPhoto(fileRecord, resetIgnored, button) {
+  if (!state.support.backend) return;
+  button.disabled = true;
+  try {
+    const response = await fetch(resetIgnored ? "/api/reset-ignored-faces" : "/api/rescan-photo", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ fileId: fileRecord.id }),
+    });
+    const payload = await response.json();
+    if (!payload.ok) throw new Error(payload.error || "Could not rescan photo.");
+
+    state.files.clear();
+    for (const record of payload.files) {
+      state.files.set(record.id, record);
+    }
+    populateYearFilter();
+    const autoTagged = payload.autoTagged ? ` ${payload.autoTagged} faces auto-tagged.` : "";
+    setProgress(`${resetIgnored ? "Ignored faces reset and photo rescanned." : "Photo rescanned."}${autoTagged}`, 100);
+    renderCurrentView({ preserveScroll: true });
+  } catch (error) {
+    setProgress(error.message, 0);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function normalizeName(name = "") {

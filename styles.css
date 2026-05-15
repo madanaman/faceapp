@@ -25,7 +25,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -256,6 +257,35 @@ aside {
   margin-bottom: 14px;
 }
 
+.gallery-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  margin: 0 0 14px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfa;
+}
+
+.gallery-toolbar label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.gallery-toolbar select,
+.gallery-toolbar input {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  padding: 0 10px;
+}
+
 .people-list {
   display: grid;
   gap: 8px;
@@ -330,6 +360,7 @@ aside {
   aspect-ratio: 4 / 3;
   background: #e9ede9;
   overflow: hidden;
+  cursor: zoom-in;
 }
 
 .media-wrap img,
@@ -349,7 +380,7 @@ aside {
 
 .photo-meta {
   display: grid;
-  gap: 3px;
+  gap: 6px;
   padding: 12px 12px 8px;
 }
 
@@ -365,6 +396,19 @@ aside {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.photo-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.photo-actions button {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .faces {
@@ -395,7 +439,8 @@ aside {
   padding: 0 10px;
 }
 
-.remove-face-btn {
+.remove-face-btn,
+.remove-face {
   display: inline-grid;
   place-items: center;
   width: 28px;
@@ -412,7 +457,8 @@ aside {
   padding: 0;
 }
 
-.remove-face-btn:hover {
+.remove-face-btn:hover,
+.remove-face:hover {
   background: #a91f1f;
 }
 

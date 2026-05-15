@@ -77,14 +77,51 @@
             <h2 id="galleryTitle">Matches</h2>
             <span id="galleryHint">Search uses AND matching for multiple names.</span>
           </div>
+          <div class="gallery-toolbar" aria-label="Gallery filters">
+            <label>
+              Year
+              <select id="yearFilter">
+                <option value="">Any</option>
+              </select>
+            </label>
+            <label>
+              Month
+              <select id="monthFilter">
+                <option value="">Any</option>
+                <option value="01">Jan</option>
+                <option value="02">Feb</option>
+                <option value="03">Mar</option>
+                <option value="04">Apr</option>
+                <option value="05">May</option>
+                <option value="06">Jun</option>
+                <option value="07">Jul</option>
+                <option value="08">Aug</option>
+                <option value="09">Sep</option>
+                <option value="10">Oct</option>
+                <option value="11">Nov</option>
+                <option value="12">Dec</option>
+              </select>
+            </label>
+            <label>
+              Date
+              <input id="dateFilter" type="date">
+            </label>
+            <label>
+              Sort
+              <select id="sortDirection">
+                <option value="desc">Newest first</option>
+                <option value="asc">Oldest first</option>
+              </select>
+            </label>
+          </div>
           <div id="gallery" class="gallery"></div>
         </section>
       </section>
     </main>
 
     <div id="lightbox" class="lightbox" aria-hidden="true">
-      <button id="lightboxClose" class="lightbox-close" type="button" aria-label="Close enlarged photo">x</button>
-      <button id="lightboxPrev" class="lightbox-nav lightbox-prev" type="button" aria-label="Previous photo">&lt;</button>
+      <button id="lightboxClose" class="lightbox-close" type="button" aria-label="Close viewer">×</button>
+      <button id="lightboxPrev" class="lightbox-nav lightbox-prev" type="button" aria-label="Previous photo">‹</button>
       <figure class="lightbox-frame">
         <img id="lightboxImage" alt="">
         <figcaption>
@@ -92,7 +129,7 @@
           <span id="lightboxMeta"></span>
         </figcaption>
       </figure>
-      <button id="lightboxNext" class="lightbox-nav lightbox-next" type="button" aria-label="Next photo">&gt;</button>
+      <button id="lightboxNext" class="lightbox-nav lightbox-next" type="button" aria-label="Next photo">›</button>
     </div>
 
     <div id="busyOverlay" class="busy-overlay" aria-hidden="true" role="status">
@@ -108,6 +145,10 @@
         <div class="photo-meta">
           <strong class="file-name"></strong>
           <span class="file-path"></span>
+          <div class="photo-actions">
+            <button class="rescan-photo" type="button">Rescan faces</button>
+            <button class="reset-ignored" type="button">Reset ignored</button>
+          </div>
         </div>
         <div class="faces"></div>
       </article>
@@ -117,7 +158,7 @@
       <div class="face-chip">
         <canvas width="96" height="96"></canvas>
         <input type="text" placeholder="Tag name" list="personSuggestions">
-        <button type="button" class="remove-face-btn" aria-label="Remove face" title="Remove face">-</button>
+        <button type="button" class="remove-face-btn" aria-label="Remove face" title="Remove face">−</button>
       </div>
     </template>
 
