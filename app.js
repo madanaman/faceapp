@@ -371,7 +371,6 @@ function handleLightboxKeys(event) {
   if (event.key === "ArrowLeft") stepLightbox(-1);
   if (event.key === "ArrowRight") stepLightbox(1);
 }
-
 function createMediaElement(fileRecord) {
   const url = getObjectUrl(fileRecord);
   if (VIDEO_TYPES.has(fileRecord.type)) {

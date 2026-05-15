@@ -56,6 +56,7 @@ def scan_folder(folder: Path) -> dict:
                     warnings.append(f"{path.name}: skipped because it could not be decoded.")
                     continue
 
+                analysis["faces"] = database.filter_ignored_faces(conn, file_id, analysis["faces"])
                 metadata = extract_photo_metadata(path)
                 auto_tagged += apply_known_tags(conn, analysis["faces"])
 
@@ -75,6 +76,47 @@ def scan_folder(folder: Path) -> dict:
                 records.append(record)
 
     return {"files": records, "autoTagged": auto_tagged, "warnings": warnings}
+
+
+def rescan_photo(file_id: str, reset_ignored: bool = False) -> dict:
+    path = Path(file_id)
+    if not path.exists() or not path.is_file():
+        raise ValueError("Photo file does not exist.")
+
+    warnings = []
+    auto_tagged = 0
+    signature = file_signature(path)
+
+    with database.connection() as conn:
+        if not database.find_file(conn, file_id):
+            raise ValueError("Photo is not indexed.")
+
+        with conn:
+            if reset_ignored:
+                database.clear_ignored_faces(conn, file_id)
+
+            analysis = detect_faces(path)
+            if not analysis["width"] or not analysis["height"]:
+                raise ValueError("Photo could not be decoded.")
+
+            analysis["faces"] = database.filter_ignored_faces(conn, file_id, analysis["faces"])
+            metadata = extract_photo_metadata(path)
+            auto_tagged += apply_known_tags(conn, analysis["faces"])
+            record = {
+                "id": file_id,
+                "name": path.name,
+                "path": file_id,
+                "type": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+                "signature": signature,
+                "width": analysis["width"],
+                "height": analysis["height"],
+                "faces": analysis["faces"],
+                "metadata": metadata,
+                "place": gps_place(metadata),
+            }
+            database.save_file(conn, record)
+
+        return {"files": database.list_files(conn), "autoTagged": auto_tagged, "warnings": warnings}
 
 
 def gps_place(metadata: dict) -> dict:

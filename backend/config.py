@@ -11,6 +11,8 @@ ENGINE_NAME = "InsightFace buffalo_l"
 REQUESTED_PROVIDERS = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
 DEFAULT_MODEL = "buffalo_l"
 DEFAULT_MATCH_THRESHOLD = 0.42
+DEFAULT_FACE_RECONCILE_THRESHOLD = 0.85
+DEFAULT_FACE_BOX_IOU_THRESHOLD = 0.7
 
 os.environ.setdefault("MPLCONFIGDIR", str(ROOT / ".cache" / "matplotlib"))
 os.environ.setdefault("NO_ALBUMENTATIONS_UPDATE", "1")
@@ -22,3 +24,11 @@ def model_name() -> str:
 
 def match_threshold() -> float:
     return float(os.environ.get("FACE_MATCH_THRESHOLD", str(DEFAULT_MATCH_THRESHOLD)))
+
+
+def face_reconcile_threshold() -> float:
+    return float(os.environ.get("FACE_RECONCILE_THRESHOLD", str(DEFAULT_FACE_RECONCILE_THRESHOLD)))
+
+
+def face_box_iou_threshold() -> float:
+    return float(os.environ.get("FACE_BOX_IOU_THRESHOLD", str(DEFAULT_FACE_BOX_IOU_THRESHOLD)))

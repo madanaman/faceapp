@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlparse
 from . import database
 from .config import ROOT
 from .detector import health_payload
-from .scanner import scan_folder
+from .scanner import rescan_photo, scan_folder
 from .tagging import tag_face
 
 
@@ -54,6 +54,15 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/tag":
             self.handle_tag()
             return
+        if parsed.path == "/api/ignore-face":
+            self.handle_ignore_face()
+            return
+        if parsed.path == "/api/rescan-photo":
+            self.handle_rescan_photo(reset_ignored=False)
+            return
+        if parsed.path == "/api/reset-ignored-faces":
+            self.handle_rescan_photo(reset_ignored=True)
+            return
         if parsed.path == "/api/clear":
             self.handle_clear()
             return
@@ -76,6 +85,24 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
         )
         status = result.pop("status", 200)
         self.send_json(result, status=status)
+
+    def handle_ignore_face(self) -> None:
+        payload = self.read_json()
+        with database.connection() as conn:
+            with conn:
+                removed = database.ignore_face(conn, payload["fileId"], payload["faceId"])
+            if not removed:
+                self.send_json({"ok": False, "error": "Face not found"}, status=404)
+                return
+            self.send_json({"ok": True, "files": database.list_files(conn)})
+
+    def handle_rescan_photo(self, reset_ignored: bool) -> None:
+        payload = self.read_json()
+        try:
+            result = rescan_photo(payload["fileId"], reset_ignored=reset_ignored)
+            self.send_json({"ok": True, **result})
+        except Exception as exc:
+            self.send_json({"ok": False, "error": str(exc)}, status=400)
 
     def handle_clear(self) -> None:
         with database.connection() as conn:

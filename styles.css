@@ -618,6 +618,16 @@ aside {
     grid-template-columns: 1fr;
   }
 
+  .lightbox {
+    grid-template-columns: 48px minmax(0, 1fr) 48px;
+    padding: 16px;
+  }
+
+  .lightbox-nav {
+    width: 42px;
+    min-width: 42px;
+  }
+
   aside {
     position: static;
   }
