@@ -46,6 +46,12 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
             return
         super().do_GET()
 
+    def end_headers(self) -> None:
+        parsed = urlparse(self.path)
+        if not parsed.path.startswith("/api/media"):
+            self.send_header("cache-control", "no-store")
+        super().end_headers()
+
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/api/scan":
@@ -71,7 +77,10 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
     def handle_scan(self) -> None:
         payload = self.read_json()
         try:
-            result = scan_folder(Path(payload.get("path", "")).expanduser())
+            result = scan_folder(
+                Path(payload.get("path", "")).expanduser(),
+                scan_mode=payload.get("scanMode", "photos"),
+            )
             self.send_json({"ok": True, **result})
         except Exception as exc:
             self.send_json({"ok": False, "error": str(exc)}, status=400)

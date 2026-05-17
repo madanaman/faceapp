@@ -77,12 +77,17 @@ def detect_faces(path: Path) -> dict:
     except ModuleNotFoundError as exc:
         raise RuntimeError("OpenCV is missing. Install `opencv-python`.") from exc
 
-    app = ensure_detector()
     image = cv2.imread(str(path))
     if image is None:
         return {"width": 0, "height": 0, "faces": []}
 
     height, width = image.shape[:2]
+    return {"width": width, "height": height, "faces": detect_faces_in_image(image)}
+
+
+def detect_faces_in_image(image) -> list[dict]:
+    height, width = image.shape[:2]
+    app = ensure_detector()
     faces = []
     for index, face in enumerate(app.get(image)):
         x1, y1, x2, y2 = [float(value) for value in face.bbox]
@@ -95,8 +100,9 @@ def detect_faces(path: Path) -> dict:
                 "id": f"candidate-{index}",
                 "box": {"x": x1, "y": y1, "width": x2 - x1, "height": y2 - y1},
                 "embedding": [float(value) for value in getattr(face, "normed_embedding", [])],
+                "detScore": float(getattr(face, "det_score", 0.0)),
                 "tag": "",
                 "thumbnail": "",  # Keep future thumbnails as file paths, not base64 blobs.
             }
         )
-    return {"width": width, "height": height, "faces": faces}
+    return faces
