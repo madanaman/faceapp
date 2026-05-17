@@ -1,4 +1,4 @@
-PYTHON_BIN ?= /opt/homebrew/Caskroom/miniforge/base/envs/faceapp/bin/python
+PYTHON_BIN ?= python3
 
 .PHONY: run check
 

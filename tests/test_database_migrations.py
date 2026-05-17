@@ -69,7 +69,7 @@ class DatabaseMigrationTest(unittest.TestCase):
             values ('cluster-1', 'video-1', 'face-representative', 2)
             """
         )
-        person_id = database.get_or_create_person(conn, "Aman")
+        person_id = database.get_or_create_person(conn, "Alex")
         conn.execute(
             """
             insert into face_people (face_id, person_id, confidence, source)
@@ -82,7 +82,7 @@ class DatabaseMigrationTest(unittest.TestCase):
 
         self.assertEqual(len(faces), 1)
         self.assertEqual(faces[0]["id"], "face-representative")
-        self.assertEqual(faces[0]["tag"], "Aman")
+        self.assertEqual(faces[0]["tag"], "Alex")
         self.assertEqual(faces[0]["tagSource"], "manual")
 
     def test_ignoring_cluster_stores_one_centroid_row(self):
