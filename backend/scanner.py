@@ -64,11 +64,12 @@ def scan_folder(folder: Path, scan_mode: str = "photos") -> dict:
 
                 analysis["faces"] = database.filter_ignored_faces(conn, file_id, analysis["faces"])
                 analysis["clusters"] = cluster_faces(analysis["faces"]) if is_video(path) else []
+                # Video container timestamps are not extracted yet; video date
+                # filters currently rely on the file name/signature metadata.
                 metadata = extract_photo_metadata(path) if is_image(path) else {}
                 auto_tagged += apply_known_tags(conn, analysis["faces"])
                 propagate_cluster_tags(analysis["faces"])
                 analysis["clusters"] = merge_clusters_by_tag(analysis["clusters"]) if is_video(path) else []
-                propagate_cluster_tags(analysis["faces"])
 
                 record = {
                     "id": file_id,
@@ -114,11 +115,12 @@ def rescan_photo(file_id: str, reset_ignored: bool = False) -> dict:
 
             analysis["faces"] = database.filter_ignored_faces(conn, file_id, analysis["faces"])
             analysis["clusters"] = cluster_faces(analysis["faces"]) if is_video(path) else []
+            # Video container timestamps are not extracted yet; video date
+            # filters currently rely on the file name/signature metadata.
             metadata = extract_photo_metadata(path) if is_image(path) else {}
             auto_tagged += apply_known_tags(conn, analysis["faces"])
             propagate_cluster_tags(analysis["faces"])
             analysis["clusters"] = merge_clusters_by_tag(analysis["clusters"]) if is_video(path) else []
-            propagate_cluster_tags(analysis["faces"])
             record = {
                 "id": file_id,
                 "name": path.name,

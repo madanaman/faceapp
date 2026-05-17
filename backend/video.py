@@ -12,14 +12,17 @@ from .config import (
 )
 from .detector import detect_faces_in_image
 
+try:
+    import cv2  # type: ignore
+except ModuleNotFoundError:
+    cv2 = None
+
 SCENE_DIFFERENCE_THRESHOLD = 7.5
 
 
 def analyze_video(path: Path) -> dict:
-    try:
-        import cv2  # type: ignore
-    except ModuleNotFoundError as exc:
-        raise RuntimeError("OpenCV is missing. Install `opencv-python`.") from exc
+    if cv2 is None:
+        raise RuntimeError("OpenCV is missing. Install `opencv-python`.")
 
     warnings = []
     capture = cv2.VideoCapture(str(path))
@@ -57,7 +60,7 @@ def analyze_video(path: Path) -> dict:
             continue
         decoded += 1
 
-        signature = frame_signature(frame, cv2)
+        signature = frame_signature(frame)
         if previous_signature is not None and frame_difference(previous_signature, signature) < SCENE_DIFFERENCE_THRESHOLD:
             continue
         previous_signature = signature
@@ -68,7 +71,7 @@ def analyze_video(path: Path) -> dict:
             face["id"] = f"candidate-{frame_index}-{face_index}"
             face["frameIndex"] = frame_index
             face["timestampSeconds"] = timestamp
-            face["thumbnail"] = save_face_thumbnail(path, frame, face, cv2)
+            face["thumbnail"] = save_face_thumbnail(path, frame, face)
             faces.append(face)
 
     capture.release()
@@ -88,6 +91,8 @@ def analyze_video(path: Path) -> dict:
 
 def estimated_sample_count(duration: float | None, interval: float, max_frames: int) -> int:
     if duration is None:
+        # Some codecs do not expose duration. In that case we optimistically try
+        # up to the frame cap; the scan loop still stops when frame_count ends.
         return max_frames
     return min(max_frames, int(duration / interval) + 1)
 
@@ -100,7 +105,7 @@ def is_main_video_face(face: dict, min_score: float, min_face_height: float) -> 
     return True
 
 
-def frame_signature(frame, cv2) -> object:
+def frame_signature(frame) -> object:
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     return cv2.resize(gray, (64, 36))
 
@@ -109,7 +114,7 @@ def frame_difference(a, b) -> float:
     return float(abs(a.astype("float32") - b.astype("float32")).mean())
 
 
-def save_face_thumbnail(path: Path, frame, face: dict, cv2) -> str:
+def save_face_thumbnail(path: Path, frame, face: dict) -> str:
     THUMBNAIL_DIR.mkdir(parents=True, exist_ok=True)
     box = face.get("box", {})
     height, width = frame.shape[:2]
@@ -120,7 +125,8 @@ def save_face_thumbnail(path: Path, frame, face: dict, cv2) -> str:
     if x2 <= x1 or y2 <= y1:
         return ""
 
-    digest = hashlib.sha1(f"{path}:{face['id']}".encode("utf-8")).hexdigest()[:16]
+    timestamp = face.get("timestampSeconds", "")
+    digest = hashlib.sha1(f"{path}:{timestamp}:{x1}:{y1}:{x2}:{y2}".encode("utf-8")).hexdigest()[:16]
     thumbnail_path = THUMBNAIL_DIR / f"{digest}.jpg"
     crop = frame[y1:y2, x1:x2]
     cv2.imwrite(str(thumbnail_path), crop, [int(cv2.IMWRITE_JPEG_QUALITY), 82])

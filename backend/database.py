@@ -19,7 +19,6 @@ def connect() -> sqlite3.Connection:
     conn.execute("pragma journal_mode = wal")
     ensure_schema(conn)
     run_migrations(conn)
-    ensure_indexes(conn)
     return conn
 
 
@@ -132,11 +131,6 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         """
     )
 
-
-def ensure_indexes(conn: sqlite3.Connection) -> None:
-    conn.execute("create index if not exists idx_faces_cluster_id on faces(cluster_id)")
-
-
 def run_migrations(conn: sqlite3.Connection) -> None:
     version = conn.execute("pragma user_version").fetchone()[0]
     if version < 1:
@@ -152,7 +146,9 @@ def run_migrations(conn: sqlite3.Connection) -> None:
         add_column_if_missing(conn, "photos", "duration_seconds", "real")
     if version != SCHEMA_VERSION:
         conn.execute(f"pragma user_version = {SCHEMA_VERSION}")
-        conn.commit()
+    # Legacy databases may not have faces.cluster_id until the migrations above.
+    conn.execute("create index if not exists idx_faces_cluster_id on faces(cluster_id)")
+    conn.commit()
 
 
 def migrate_legacy_files(conn: sqlite3.Connection) -> None:
@@ -261,6 +257,8 @@ def photo_to_record(conn: sqlite3.Connection, photo_row: sqlite3.Row) -> dict:
 
 
 def list_faces(conn: sqlite3.Connection, photo_id: str) -> list[dict]:
+    # Clustered videos expose only the representative face to the UI/API. Tagging
+    # and ignore operations expand back to all cluster members via cluster_id.
     rows = conn.execute(
         """
         with cluster_tags as (
@@ -425,7 +423,7 @@ def replace_faces(
         if face.get("tag"):
             set_face_tag(conn, face["id"], face["tag"], source=face.get("tagSource") or source)
 
-    for cluster in normalized_clusters(clusters or []):
+    for cluster in clusters or []:
         conn.execute(
             """
             insert into face_clusters
@@ -447,22 +445,6 @@ def replace_faces(
                 cluster.get("lastSeenSeconds"),
             ),
         )
-
-
-def normalized_clusters(clusters: list[dict]) -> list[dict]:
-    normalized = []
-    for cluster in clusters:
-        faces = cluster.get("faces", [])
-        if faces:
-            representative = max(faces, key=lambda face: face.get("detScore", 0.0))
-            cluster["representativeFaceId"] = representative["id"]
-            cluster["representativeTimestampSeconds"] = representative.get("timestampSeconds")
-            cluster["faceCount"] = len(faces)
-            timestamps = [face.get("timestampSeconds") for face in faces if face.get("timestampSeconds") is not None]
-            cluster["firstSeenSeconds"] = min(timestamps) if timestamps else None
-            cluster["lastSeenSeconds"] = max(timestamps) if timestamps else None
-        normalized.append(cluster)
-    return normalized
 
 
 def filter_ignored_faces(conn: sqlite3.Connection, photo_id: str, faces: list[dict]) -> list[dict]:
@@ -531,6 +513,21 @@ def ignore_face(conn: sqlite3.Connection, file_id: str, face_id: str) -> bool:
     ).fetchone()
 
     now = datetime.utcnow().isoformat(timespec="seconds")
+    ignored_rows = rows
+    if row["cluster_id"]:
+        cluster_row = conn.execute("select * from face_clusters where id = ?", (row["cluster_id"],)).fetchone()
+        if cluster_row:
+            representative = next(
+                (current for current in rows if current["id"] == cluster_row["representative_face_id"]),
+                rows[0],
+            )
+            ignored_rows = [
+                {
+                    **dict(representative),
+                    "embedding": cluster_row["centroid"] or representative["embedding"],
+                }
+            ]
+
     conn.executemany(
         """
         insert into ignored_faces
@@ -548,7 +545,7 @@ def ignore_face(conn: sqlite3.Connection, file_id: str, face_id: str) -> bool:
                 tag_row["name"] if tag_row else None,
                 now,
             )
-            for current in rows
+            for current in ignored_rows
         ],
     )
     placeholders = ", ".join("?" for _ in face_ids)

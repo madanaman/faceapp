@@ -162,6 +162,12 @@ test("tag save patches the edited gallery card instead of rerendering every medi
   assert.match(appJs, /if \(shouldRerenderAfterTag\(updatedFile\) \|\| !replaceGalleryCard\(fileRecord\.id\)\)/);
 });
 
-test("local static files are cache-busted so UI changes load during development", () => {
-  assert.match(html, /app\.js\?v=20260518-visible-face-filter/);
+test("local static script tag does not rely on manual cache-bust strings", () => {
+  assert.match(html, /<script src="\.\/app\.js" type="module"><\/script>/);
+  assert.doesNotMatch(html, /app\.js\?v=/);
+});
+
+test("video cluster tag save sends only one backend request", () => {
+  assert.match(appJs, /body: JSON\.stringify\(\{ fileId: fileRecord\.id, faceId: faceIds\[0\], tag: cleanTag \}\)/);
+  assert.doesNotMatch(appJs, /for \(const faceId of faceIds\)[\s\S]*\/api\/tag/);
 });

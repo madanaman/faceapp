@@ -944,15 +944,13 @@ async function saveFaceTag(fileRecord, face, tag) {
     }
 
     let payload = null;
-    for (const faceId of faceIds) {
-      const response = await fetch("/api/tag", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ fileId: fileRecord.id, faceId, tag: cleanTag }),
-      });
-      payload = await response.json();
-      if (!payload.ok) throw new Error(payload.error || "Could not tag face.");
-    }
+    const response = await fetch("/api/tag", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ fileId: fileRecord.id, faceId: faceIds[0], tag: cleanTag }),
+    });
+    payload = await response.json();
+    if (!payload.ok) throw new Error(payload.error || "Could not tag face.");
 
     if (payload?.files) {
       state.files.clear();
