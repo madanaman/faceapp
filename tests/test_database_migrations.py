@@ -36,7 +36,6 @@ class DatabaseMigrationTest(unittest.TestCase):
 
         database.ensure_schema(conn)
         database.run_migrations(conn)
-        database.ensure_indexes(conn)
 
         columns = {row["name"] for row in conn.execute("pragma table_info(faces)").fetchall()}
         indexes = {row["name"] for row in conn.execute("pragma index_list(faces)").fetchall()}
@@ -48,7 +47,6 @@ class DatabaseMigrationTest(unittest.TestCase):
         conn.row_factory = sqlite3.Row
         database.ensure_schema(conn)
         database.run_migrations(conn)
-        database.ensure_indexes(conn)
         conn.execute(
             """
             insert into photos
@@ -86,6 +84,43 @@ class DatabaseMigrationTest(unittest.TestCase):
         self.assertEqual(faces[0]["id"], "face-representative")
         self.assertEqual(faces[0]["tag"], "Aman")
         self.assertEqual(faces[0]["tagSource"], "manual")
+
+    def test_ignoring_cluster_stores_one_centroid_row(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        database.ensure_schema(conn)
+        database.run_migrations(conn)
+        conn.execute(
+            """
+            insert into photos
+            (id, path, name, type, signature, width, height, duration_seconds, indexed_at)
+            values ('video-1', 'video-1.mp4', 'video-1.mp4', 'video/mp4', 'sig', 100, 100, 10, 'now')
+            """
+        )
+        conn.executemany(
+            """
+            insert into faces
+            (id, photo_id, box_x, box_y, box_width, box_height, cluster_id, embedding, thumbnail)
+            values (?, 'video-1', ?, ?, 10, 10, 'cluster-1', ?, '')
+            """,
+            [
+                ("face-representative", 0, 0, "[1.0, 0.0]"),
+                ("face-member", 20, 20, "[0.9, 0.1]"),
+            ],
+        )
+        conn.execute(
+            """
+            insert into face_clusters
+            (id, photo_id, centroid, representative_face_id, face_count)
+            values ('cluster-1', 'video-1', '[0.95, 0.05]', 'face-representative', 2)
+            """
+        )
+
+        self.assertTrue(database.ignore_face(conn, "video-1", "face-member"))
+
+        ignored = conn.execute("select * from ignored_faces where photo_id = 'video-1'").fetchall()
+        self.assertEqual(len(ignored), 1)
+        self.assertEqual(ignored[0]["embedding"], "[0.95, 0.05]")
 
 
 if __name__ == "__main__":
