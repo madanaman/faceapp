@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from .config import DB_PATH, face_box_iou_threshold, face_reconcile_threshold, match_threshold
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 5
 
 
 def connect() -> sqlite3.Connection:
@@ -19,6 +19,7 @@ def connect() -> sqlite3.Connection:
     conn.execute("pragma journal_mode = wal")
     ensure_schema(conn)
     run_migrations(conn)
+    ensure_indexes(conn)
     return conn
 
 
@@ -42,6 +43,7 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
             signature text not null,
             width real,
             height real,
+            duration_seconds real,
             indexed_at text not null
         );
 
@@ -52,8 +54,23 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
             box_y real not null,
             box_width real not null,
             box_height real not null,
+            cluster_id text,
+            frame_index integer,
+            timestamp_seconds real,
+            det_score real,
             embedding text,
             thumbnail text
+        );
+
+        create table if not exists face_clusters (
+            id text primary key,
+            photo_id text not null references photos(id) on delete cascade,
+            centroid text,
+            representative_face_id text,
+            representative_timestamp_seconds real,
+            face_count integer not null default 0,
+            first_seen_seconds real,
+            last_seen_seconds real
         );
 
         create table if not exists people (
@@ -106,6 +123,7 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
 
         create index if not exists idx_photos_signature on photos(signature);
         create index if not exists idx_faces_photo_id on faces(photo_id);
+        create index if not exists idx_face_clusters_photo_id on face_clusters(photo_id);
         create index if not exists idx_photo_metadata_taken_at on photo_metadata(taken_at);
         create index if not exists idx_photo_metadata_lat_lon on photo_metadata(latitude, longitude);
         create index if not exists idx_photo_places_city on photo_places(city);
@@ -115,12 +133,23 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     )
 
 
+def ensure_indexes(conn: sqlite3.Connection) -> None:
+    conn.execute("create index if not exists idx_faces_cluster_id on faces(cluster_id)")
+
+
 def run_migrations(conn: sqlite3.Connection) -> None:
     version = conn.execute("pragma user_version").fetchone()[0]
     if version < 1:
         migrate_legacy_files(conn)
     if version < 2:
         add_column_if_missing(conn, "ignored_faces", "ignored_tag", "text")
+    if version < 4:
+        add_column_if_missing(conn, "faces", "cluster_id", "text")
+        add_column_if_missing(conn, "faces", "frame_index", "integer")
+        add_column_if_missing(conn, "faces", "timestamp_seconds", "real")
+        add_column_if_missing(conn, "faces", "det_score", "real")
+    if version < 5:
+        add_column_if_missing(conn, "photos", "duration_seconds", "real")
     if version != SCHEMA_VERSION:
         conn.execute(f"pragma user_version = {SCHEMA_VERSION}")
         conn.commit()
@@ -224,6 +253,7 @@ def photo_to_record(conn: sqlite3.Connection, photo_row: sqlite3.Row) -> dict:
         "signature": photo_row["signature"],
         "width": photo_row["width"],
         "height": photo_row["height"],
+        "durationSeconds": photo_row["duration_seconds"] if "duration_seconds" in photo_row.keys() else None,
         "faces": list_faces(conn, photo_row["id"]),
         "metadata": row_dict(metadata) if metadata else {},
         "place": row_dict(place) if place else {},
@@ -233,17 +263,46 @@ def photo_to_record(conn: sqlite3.Connection, photo_row: sqlite3.Row) -> dict:
 def list_faces(conn: sqlite3.Connection, photo_id: str) -> list[dict]:
     rows = conn.execute(
         """
+        with cluster_tags as (
+            select
+                f2.cluster_id,
+                coalesce(
+                    max(case when fp2.source = 'manual' then p2.name end),
+                    max(p2.name)
+                ) as cluster_tag,
+                coalesce(
+                    max(case when fp2.source = 'manual' then fp2.source end),
+                    max(fp2.source)
+                ) as cluster_tag_source
+            from faces f2
+            left join face_people fp2 on fp2.face_id = f2.id
+            left join people p2 on p2.id = fp2.person_id
+            where f2.photo_id = ?
+              and f2.cluster_id is not null
+            group by f2.cluster_id
+        )
         select
             f.*,
-            p.name as tag,
-            fp.source as tag_source
+            case
+                when ct.cluster_tag_source = 'manual' then ct.cluster_tag
+                else coalesce(p.name, ct.cluster_tag)
+            end as tag,
+            case
+                when ct.cluster_tag_source = 'manual' then ct.cluster_tag_source
+                else coalesce(fp.source, ct.cluster_tag_source)
+            end as tag_source,
+            fc.face_count as cluster_face_count,
+            fc.representative_timestamp_seconds as cluster_representative_timestamp_seconds
         from faces f
+        left join face_clusters fc on fc.id = f.cluster_id
+        left join cluster_tags ct on ct.cluster_id = f.cluster_id
         left join face_people fp on fp.face_id = f.id
         left join people p on p.id = fp.person_id
         where f.photo_id = ?
+          and (f.cluster_id is null or fc.representative_face_id = f.id)
         order by f.id
         """,
-        (photo_id,),
+        (photo_id, photo_id),
     ).fetchall()
     return [face_to_record(row) for row in rows]
 
@@ -257,6 +316,12 @@ def face_to_record(row: sqlite3.Row) -> dict:
             "width": row["box_width"],
             "height": row["box_height"],
         },
+        "clusterId": row["cluster_id"] or "",
+        "frameIndex": row["frame_index"],
+        "timestampSeconds": row["timestamp_seconds"],
+        "detScore": row["det_score"],
+        "appearanceCount": row["cluster_face_count"] or 1,
+        "representativeTimestampSeconds": row["cluster_representative_timestamp_seconds"],
         "embedding": json.loads(row["embedding"] or "[]"),
         "tag": row["tag"] or "",
         "tagSource": row["tag_source"] or "",
@@ -282,8 +347,8 @@ def save_file(conn: sqlite3.Connection, record: dict) -> None:
     now = datetime.utcnow().isoformat(timespec="seconds")
     conn.execute(
         """
-        insert into photos (id, path, name, type, signature, width, height, indexed_at)
-        values (?, ?, ?, ?, ?, ?, ?, ?)
+        insert into photos (id, path, name, type, signature, width, height, duration_seconds, indexed_at)
+        values (?, ?, ?, ?, ?, ?, ?, ?, ?)
         on conflict(id) do update set
             path = excluded.path,
             name = excluded.name,
@@ -291,6 +356,7 @@ def save_file(conn: sqlite3.Connection, record: dict) -> None:
             signature = excluded.signature,
             width = excluded.width,
             height = excluded.height,
+            duration_seconds = excluded.duration_seconds,
             indexed_at = excluded.indexed_at
         """,
         (
@@ -301,16 +367,23 @@ def save_file(conn: sqlite3.Connection, record: dict) -> None:
             record["signature"],
             record["width"],
             record["height"],
+            record.get("durationSeconds"),
             now,
         ),
     )
     faces = filter_ignored_faces(conn, record["id"], record.get("faces", []))
-    replace_faces(conn, record["id"], faces, source="manual")
+    replace_faces(conn, record["id"], faces, source="manual", clusters=record.get("clusters", []))
     save_metadata(conn, record["id"], record.get("metadata", {}))
     save_place(conn, record["id"], record.get("place", {}))
 
 
-def replace_faces(conn: sqlite3.Connection, photo_id: str, faces: list[dict], source: str) -> None:
+def replace_faces(
+    conn: sqlite3.Connection,
+    photo_id: str,
+    faces: list[dict],
+    source: str,
+    clusters: list[dict] | None = None,
+) -> None:
     # Callers own the transaction so delete/insert replacement stays atomic per photo.
     reconciled_faces = reconcile_faces(conn, photo_id, faces)
     conn.execute(
@@ -318,14 +391,19 @@ def replace_faces(conn: sqlite3.Connection, photo_id: str, faces: list[dict], so
         (photo_id,),
     )
     conn.execute("delete from faces where photo_id = ?", (photo_id,))
+    conn.execute("delete from face_clusters where photo_id = ?", (photo_id,))
 
     for face in reconciled_faces:
         box = face["box"]
         conn.execute(
             """
             insert into faces
-            (id, photo_id, box_x, box_y, box_width, box_height, embedding, thumbnail)
-            values (?, ?, ?, ?, ?, ?, ?, ?)
+            (
+                id, photo_id, box_x, box_y, box_width, box_height,
+                cluster_id, frame_index, timestamp_seconds, det_score,
+                embedding, thumbnail
+            )
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 face["id"],
@@ -334,12 +412,57 @@ def replace_faces(conn: sqlite3.Connection, photo_id: str, faces: list[dict], so
                 box["y"],
                 box["width"],
                 box["height"],
+                face.get("clusterId"),
+                face.get("frameIndex"),
+                face.get("timestampSeconds"),
+                face.get("detScore"),
                 json.dumps(face.get("embedding", [])),
                 face.get("thumbnail", ""),
             ),
         )
+
+    for face in reconciled_faces:
         if face.get("tag"):
             set_face_tag(conn, face["id"], face["tag"], source=face.get("tagSource") or source)
+
+    for cluster in normalized_clusters(clusters or []):
+        conn.execute(
+            """
+            insert into face_clusters
+            (
+                id, photo_id, centroid, representative_face_id,
+                representative_timestamp_seconds, face_count,
+                first_seen_seconds, last_seen_seconds
+            )
+            values (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                cluster["id"],
+                photo_id,
+                json.dumps(cluster.get("centroid", [])),
+                cluster.get("representativeFaceId"),
+                cluster.get("representativeTimestampSeconds"),
+                cluster.get("faceCount", 0),
+                cluster.get("firstSeenSeconds"),
+                cluster.get("lastSeenSeconds"),
+            ),
+        )
+
+
+def normalized_clusters(clusters: list[dict]) -> list[dict]:
+    normalized = []
+    for cluster in clusters:
+        faces = cluster.get("faces", [])
+        if faces:
+            representative = max(faces, key=lambda face: face.get("detScore", 0.0))
+            cluster["representativeFaceId"] = representative["id"]
+            cluster["representativeTimestampSeconds"] = representative.get("timestampSeconds")
+            cluster["faceCount"] = len(faces)
+            timestamps = [face.get("timestampSeconds") for face in faces if face.get("timestampSeconds") is not None]
+            cluster["firstSeenSeconds"] = min(timestamps) if timestamps else None
+            cluster["lastSeenSeconds"] = max(timestamps) if timestamps else None
+        normalized.append(cluster)
+    return normalized
 
 
 def filter_ignored_faces(conn: sqlite3.Connection, photo_id: str, faces: list[dict]) -> list[dict]:
@@ -392,6 +515,11 @@ def ignore_face(conn: sqlite3.Connection, file_id: str, face_id: str) -> bool:
     row = conn.execute("select * from faces where photo_id = ? and id = ?", (file_id, face_id)).fetchone()
     if not row:
         return False
+    face_ids = related_cluster_face_ids(conn, face_id)
+    rows = conn.execute(
+        f"select * from faces where id in ({', '.join('?' for _ in face_ids)})",
+        tuple(face_ids),
+    ).fetchall()
     tag_row = conn.execute(
         """
         select p.name
@@ -402,25 +530,32 @@ def ignore_face(conn: sqlite3.Connection, file_id: str, face_id: str) -> bool:
         (face_id,),
     ).fetchone()
 
-    conn.execute(
+    now = datetime.utcnow().isoformat(timespec="seconds")
+    conn.executemany(
         """
         insert into ignored_faces
         (photo_id, box_x, box_y, box_width, box_height, embedding, ignored_tag, created_at)
         values (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (
-            file_id,
-            row["box_x"],
-            row["box_y"],
-            row["box_width"],
-            row["box_height"],
-            row["embedding"],
-            tag_row["name"] if tag_row else None,
-            datetime.utcnow().isoformat(timespec="seconds"),
-        ),
+        [
+            (
+                file_id,
+                current["box_x"],
+                current["box_y"],
+                current["box_width"],
+                current["box_height"],
+                current["embedding"],
+                tag_row["name"] if tag_row else None,
+                now,
+            )
+            for current in rows
+        ],
     )
-    conn.execute("delete from face_people where face_id = ?", (face_id,))
-    conn.execute("delete from faces where id = ?", (face_id,))
+    placeholders = ", ".join("?" for _ in face_ids)
+    conn.execute(f"delete from face_people where face_id in ({placeholders})", tuple(face_ids))
+    conn.execute(f"delete from faces where id in ({placeholders})", tuple(face_ids))
+    if row["cluster_id"]:
+        conn.execute("delete from face_clusters where id = ?", (row["cluster_id"],))
     return True
 
 
@@ -534,18 +669,28 @@ def save_place(conn: sqlite3.Connection, photo_id: str, place: dict) -> None:
 
 
 def set_face_tag(conn: sqlite3.Connection, face_id: str, tag: str, source: str) -> None:
-    conn.execute("delete from face_people where face_id = ?", (face_id,))
+    face_ids = related_cluster_face_ids(conn, face_id)
+    placeholders = ", ".join("?" for _ in face_ids)
+    conn.execute(f"delete from face_people where face_id in ({placeholders})", tuple(face_ids))
     clean_tag = tag.strip()
     if not clean_tag:
         return
     person_id = get_or_create_person(conn, clean_tag)
-    conn.execute(
+    conn.executemany(
         """
         insert or replace into face_people (face_id, person_id, confidence, source)
         values (?, ?, ?, ?)
         """,
-        (face_id, person_id, None, source),
+        [(current_face_id, person_id, None, source) for current_face_id in face_ids],
     )
+
+
+def related_cluster_face_ids(conn: sqlite3.Connection, face_id: str) -> list[str]:
+    row = conn.execute("select cluster_id from faces where id = ?", (face_id,)).fetchone()
+    if not row or not row["cluster_id"]:
+        return [face_id]
+    rows = conn.execute("select id from faces where cluster_id = ?", (row["cluster_id"],)).fetchall()
+    return [row["id"] for row in rows] or [face_id]
 
 
 def get_or_create_person(conn: sqlite3.Connection, name: str) -> int:
@@ -604,6 +749,7 @@ def clear_files(conn: sqlite3.Connection) -> None:
     conn.execute("delete from face_people")
     conn.execute("delete from ignored_faces")
     conn.execute("delete from people")
+    conn.execute("delete from face_clusters")
     conn.execute("delete from faces")
     conn.execute("delete from photo_places")
     conn.execute("delete from photo_metadata")

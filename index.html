@@ -24,8 +24,16 @@
           <span id="folderLabel">No folder selected</span>
         </div>
         <div class="path-row">
-          <label for="pathInput">Photo folder</label>
+          <label for="pathInput">Folder</label>
           <input id="pathInput" type="text" placeholder="/Users/you/Pictures/Google Photos">
+          <label class="scan-label" for="scanMode">
+            Scan
+            <select id="scanMode">
+              <option value="photos">Photos</option>
+              <option value="videos">Videos</option>
+              <option value="both">Both</option>
+            </select>
+          </label>
           <button id="scanPathBtn" class="primary">Scan Path</button>
         </div>
         <div class="search-row">
@@ -58,18 +66,30 @@
       <section class="progress-wrap" aria-live="polite">
         <div class="progress-info">
           <span id="progressText">Choose a folder to begin.</span>
-          <span id="progressPercent"></span>
+          <span class="progress-actions">
+            <span id="progressPercent"></span>
+            <button id="activityToggle" class="activity-link" type="button" aria-expanded="false" aria-controls="activityPanel">Activity: Idle</button>
+          </span>
         </div>
         <progress id="scanProgress" max="100" value="0"></progress>
+        <div id="activityPanel" class="activity-popover" hidden>
+          <div class="activity-head">
+            <strong>Recent activity</strong>
+            <button id="activityClose" class="mini ghost" type="button">Close</button>
+          </div>
+          <ol id="activityList" class="activity-list" aria-live="polite"></ol>
+        </div>
       </section>
 
       <section class="workspace">
         <aside>
-          <div class="panel-title">
-            <h2>People</h2>
-            <button id="untaggedBtn" class="mini">Untagged</button>
-          </div>
-          <div id="peopleList" class="people-list"></div>
+          <section class="side-section">
+            <div class="panel-title">
+              <h2>People</h2>
+              <button id="untaggedBtn" class="mini">Untagged</button>
+            </div>
+            <div id="peopleList" class="people-list"></div>
+          </section>
         </aside>
 
         <section class="gallery-shell">
@@ -78,6 +98,18 @@
             <span id="galleryHint">Search uses AND matching for multiple names.</span>
           </div>
           <div class="gallery-toolbar" aria-label="Gallery filters">
+            <label>
+              Type
+              <select id="mediaFilter">
+                <option value="both">Photos and videos</option>
+                <option value="photos">Photos only</option>
+                <option value="videos">Videos only</option>
+              </select>
+            </label>
+            <label class="inline-filter">
+              <input id="showNoFaceVideos" type="checkbox">
+              Show no-face videos
+            </label>
             <label>
               Year
               <select id="yearFilter">
@@ -124,6 +156,7 @@
       <button id="lightboxPrev" class="lightbox-nav lightbox-prev" type="button" aria-label="Previous photo">‹</button>
       <figure class="lightbox-frame">
         <img id="lightboxImage" alt="">
+        <video id="lightboxVideo" controls playsinline></video>
         <figcaption>
           <strong id="lightboxName"></strong>
           <span id="lightboxMeta"></span>
@@ -150,20 +183,28 @@
             <button class="reset-ignored" type="button">Reset ignored</button>
           </div>
         </div>
+        <div class="bulk-face-actions" hidden>
+          <span class="bulk-face-count">0 selected</span>
+          <button class="bulk-remove-face" type="button">Remove selected</button>
+        </div>
         <div class="faces"></div>
       </article>
     </template>
 
     <template id="faceTemplate">
       <div class="face-chip">
+        <input class="face-select" type="checkbox" aria-label="Select face">
         <canvas width="96" height="96"></canvas>
-        <input type="text" placeholder="Tag name" list="personSuggestions">
+        <div class="face-fields">
+          <input type="text" placeholder="Tag name" list="personSuggestions">
+          <span class="face-extra"></span>
+        </div>
         <button type="button" class="remove-face-btn" aria-label="Remove face" title="Remove face">−</button>
       </div>
     </template>
 
     <datalist id="personSuggestions"></datalist>
 
-    <script src="./app.js" type="module"></script>
+    <script src="./app.js?v=20260518-visible-face-filter" type="module"></script>
   </body>
 </html>

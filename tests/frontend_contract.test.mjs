@@ -25,8 +25,9 @@ test("person search keeps spaces inside names and uses commas for multiple names
 
 test("people search excludes records with no matching tagged faces at search and render time", () => {
   assert.match(appJs, /function matchesPeople\(/);
-  assert.match(appJs, /\.filter\(\(fileRecord\) => matchesPeople\(fileRecord, terms\)\)/);
-  assert.match(appJs, /if \(!matchesPeople\(fileRecord, state\.currentView\.terms \|\| \[\]\)\) continue/);
+  assert.match(appJs, /function matchesCurrentGalleryFilters\(fileRecord\)/);
+  assert.match(appJs, /\.filter\(matchesCurrentGalleryFilters\)/);
+  assert.match(appJs, /if \(!matchesCurrentGalleryFilters\(fileRecord\)\) continue/);
   assert.match(appJs, /fileRecord\.faces \|\| \[\]/);
 });
 
@@ -57,6 +58,7 @@ test("tagging and face removal show a busy overlay while changes apply", () => {
 });
 
 test("gallery date filters and per-photo rescan controls stay wired", () => {
+  assert.match(html, /id="mediaFilter"/);
   assert.match(html, /id="yearFilter"/);
   assert.match(html, /id="monthFilter"/);
   assert.match(html, /id="dateFilter"/);
@@ -66,4 +68,100 @@ test("gallery date filters and per-photo rescan controls stay wired", () => {
   assert.match(appJs, /function renderCurrentView\(/);
   assert.match(appJs, /function matchesDateFilters\(/);
   assert.match(appJs, /function rescanPhoto\(/);
+});
+
+test("scan controls let the user choose photos, videos, or both", () => {
+  assert.match(html, /id="scanMode"/);
+  assert.match(html, /value="photos"/);
+  assert.match(html, /value="videos"/);
+  assert.match(html, /value="both"/);
+  assert.match(appJs, /scanMode: document\.querySelector\("#scanMode"\)/);
+  assert.match(appJs, /body: JSON\.stringify\(\{ path, scanMode \}\)/);
+});
+
+test("video records can render in the gallery and lightbox", () => {
+  assert.match(html, /id="lightboxVideo"/);
+  assert.match(appJs, /const VIDEO_TYPES = new Set/);
+  assert.match(appJs, /document\.createElement\("video"\)/);
+  assert.match(appJs, /els\.lightboxVideo\.style\.display = isVideo \? "block" : "none"/);
+});
+
+test("gallery can filter photos versus videos and hides video preview face boxes", () => {
+  assert.match(html, /value="both">Photos and videos/);
+  assert.match(html, /value="photos">Photos only/);
+  assert.match(html, /value="videos">Videos only/);
+  assert.match(html, /id="showNoFaceVideos"/);
+  assert.match(appJs, /mediaFilter: document\.querySelector\("#mediaFilter"\)/);
+  assert.match(appJs, /showNoFaceVideos: document\.querySelector\("#showNoFaceVideos"\)/);
+  assert.match(appJs, /function matchesMediaFilter\(/);
+  assert.match(appJs, /function matchesVisibleVideoFaces\(/);
+  assert.match(appJs, /displayFaces\(fileRecord\)\.length > 0/);
+  assert.match(appJs, /\.filter\(matchesMediaFilter\)/);
+  assert.match(appJs, /\.filter\(matchesVisibleVideoFaces\)/);
+  assert.match(appJs, /if \(!isVideoRecord\(fileRecord\)\) \{\s*mediaWrap\.append\(renderFaceBox/s);
+});
+
+test("video face rows collapse repeated tagged names and paths are shortened for display", () => {
+  assert.match(appJs, /function displayFaces\(/);
+  assert.match(appJs, /groupedFaceIds/);
+  assert.match(appJs, /function displayFileLocation\(/);
+  assert.match(appJs, /function displayFolderName\(/);
+  assert.match(appJs, /path\.title = fileRecord\.path/);
+});
+
+test("face thumbnails from backend media paths render without recropping video faces", () => {
+  assert.match(html, /class="face-extra"/);
+  assert.match(appJs, /function getFaceImageUrl\(/);
+  assert.match(appJs, /\/api\/media\?path=\$\{encodeURIComponent\(face\.thumbnail\)\}/);
+  assert.match(appJs, /if \(face\.thumbnail\) \{\s*drawFullCanvas/s);
+});
+
+test("activity panel tracks running and recent background actions", () => {
+  assert.match(html, /id="activityList"/);
+  assert.match(html, /id="activityToggle"/);
+  assert.match(html, /id="activityPanel"/);
+  assert.match(appJs, /const ACTIVITY_LIMIT = 10/);
+  assert.match(appJs, /function startActivity\(/);
+  assert.match(appJs, /function finishActivity\(/);
+  assert.match(appJs, /function toggleActivityPanel\(/);
+  assert.match(appJs, /startActivity\(`Scan \$\{modeLabel\}`/);
+  assert.match(appJs, /startActivity\(cleanTag \? `Tag \$\{cleanTag\}` : "Clear tag"/);
+  assert.match(appJs, /startActivity\("Remove face box"/);
+  assert.match(appJs, /startActivity\(resetIgnored \? "Reset ignored and rescan" : "Rescan faces"/);
+});
+
+test("face list supports scrolling and bulk removal", () => {
+  assert.match(html, /class="bulk-face-actions"/);
+  assert.match(html, /class="bulk-remove-face"/);
+  assert.match(html, /class="face-select"/);
+  assert.match(appJs, /const MIN_VIDEO_FACE_APPEARANCES = 2/);
+  assert.match(appJs, /function bulkRemoveFaces\(/);
+  assert.match(appJs, /selectedFaces = new Map\(\)/);
+  assert.match(appJs, /ignoreFaceIds\(fileRecord, faceIds\)/);
+  assert.match(appJs, /function isLikelyMainVideoFace\(/);
+});
+
+test("tag editor targets the text input, not the bulk-select checkbox", () => {
+  assert.match(appJs, /querySelector\('input\[type="text"\]'\)/);
+  assert.doesNotMatch(appJs, /querySelector\("input"\)/);
+});
+
+test("tag editor saves explicitly on blur or Enter", () => {
+  assert.match(appJs, /const commitTag = async \(\) =>/);
+  assert.match(appJs, /input\.addEventListener\("blur", \(\) => \{\s*commitTag\(\)/s);
+  assert.match(appJs, /input\.addEventListener\("keydown", \(event\) => \{\s*if \(event\.key === "Enter"\)/s);
+  assert.match(appJs, /event\.preventDefault\(\)/);
+  assert.match(appJs, /commitTag\(\)/);
+});
+
+test("tag save patches the edited gallery card instead of rerendering every media item", () => {
+  assert.match(appJs, /card\.dataset\.fileId = fileRecord\.id/);
+  assert.match(appJs, /function replaceGalleryCard\(fileId\)/);
+  assert.match(appJs, /card\.replaceWith\(renderPhoto\(fileRecord\)\)/);
+  assert.match(appJs, /function shouldRerenderAfterTag\(fileRecord\)/);
+  assert.match(appJs, /if \(shouldRerenderAfterTag\(updatedFile\) \|\| !replaceGalleryCard\(fileRecord\.id\)\)/);
+});
+
+test("local static files are cache-busted so UI changes load during development", () => {
+  assert.match(html, /app\.js\?v=20260518-visible-face-filter/);
 });

@@ -7,5 +7,6 @@ run:
 
 check:
 	$(PYTHON_BIN) -m py_compile server.py backend/*.py
+	$(PYTHON_BIN) -m unittest discover -s tests -p 'test*.py'
 	node --check app.js
 	node --test tests/*.test.mjs
