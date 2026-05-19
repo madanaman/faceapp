@@ -148,6 +148,18 @@ make check
 
 The test suite intentionally avoids requiring a full InsightFace model download in CI. Heavy runtime testing should be done locally with a small private or synthetic media folder.
 
+## API Testing
+
+Import the Postman collection at [postman/Local Face Photos.postman_collection.json](postman/Local%20Face%20Photos.postman_collection.json) to test backend APIs individually.
+
+Useful collection variables:
+
+- `baseUrl`: local server URL, usually `http://127.0.0.1:8000`
+- `scanPath`: folder path to scan
+- `scanMode`: `photos`, `videos`, or `both`
+- `fileId`, `faceId`, `mediaPath`: can be populated by running `GET /api/files` after a scan
+- `tagName`: sample person tag for `POST /api/tag`
+
 ## Roadmap
 
 - Docker-first distribution for technical users.
