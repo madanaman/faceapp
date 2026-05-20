@@ -524,6 +524,7 @@ function pathParts(path = "") {
 function renderFaceBox(face, fileRecord) {
   const box = document.createElement("span");
   box.className = "face-box";
+  box.dataset.faceId = face.id;
   box.title = face.tag || "Untagged face";
   box.style.left = `${(face.box.x / fileRecord.width) * 100}%`;
   box.style.top = `${(face.box.y / fileRecord.height) * 100}%`;
@@ -542,6 +543,7 @@ function renderFaceEditor(fileRecord, face, onSelectionChange = () => {}) {
   let removeButton = fragment.querySelector(".remove-face-btn") || fragment.querySelector(".remove-face");
   const image = new Image();
 
+  chip.dataset.faceId = face.id;
   if (!removeButton) {
     removeButton = document.createElement("button");
     removeButton.className = "remove-face-btn";
@@ -575,6 +577,8 @@ function renderFaceEditor(fileRecord, face, onSelectionChange = () => {}) {
       try {
         setBusy(true, "Applying tag...");
         await saveFaceTag(fileRecord, face, tag);
+        input.value = tag;
+        face.tag = tag;
         savedTag = tag;
         updateStats();
         renderPeople();
@@ -757,6 +761,48 @@ function replaceGalleryCard(fileId) {
   return false;
 }
 
+function applyTagToFileRecord(fileRecord, faceIds, tag) {
+  let updated = 0;
+  for (const candidate of fileRecord.faces || []) {
+    if (faceIds.includes(candidate.id)) {
+      candidate.tag = tag;
+      candidate.tagSource = tag ? "manual" : "";
+      updated += 1;
+    }
+  }
+  return updated;
+}
+
+function syncFileRecord(fileRecord, updatedFile) {
+  if (!updatedFile) return fileRecord;
+  Object.assign(fileRecord, updatedFile);
+  state.files.set(fileRecord.id, fileRecord);
+  return fileRecord;
+}
+
+function refreshRenderedFaceTags() {
+  for (const card of els.gallery.querySelectorAll(".photo-card")) {
+    const fileRecord = state.files.get(card.dataset.fileId);
+    if (!fileRecord) continue;
+
+    const tagsByFaceId = new Map((fileRecord.faces || []).map((face) => [face.id, face.tag || ""]));
+    for (const chip of card.querySelectorAll(".face-chip")) {
+      const input = chip.querySelector('input[type="text"]');
+      const tag = tagsByFaceId.get(chip.dataset.faceId);
+      if (input && tag !== undefined) {
+        input.value = tag;
+      }
+    }
+
+    for (const box of card.querySelectorAll(".face-box")) {
+      const tag = tagsByFaceId.get(box.dataset.faceId);
+      if (tag !== undefined) {
+        box.title = tag || "Untagged face";
+      }
+    }
+  }
+}
+
 function shouldRerenderAfterTag(fileRecord) {
   if (!fileRecord) return true;
   if (!matchesCurrentGalleryFilters(fileRecord)) return true;
@@ -933,11 +979,7 @@ async function saveFaceTag(fileRecord, face, tag) {
   const activityId = startActivity(cleanTag ? `Tag ${cleanTag}` : "Clear tag", fileRecord.name);
   try {
     if (!state.support.backend) {
-      for (const candidate of fileRecord.faces) {
-        if (faceIds.includes(candidate.id)) {
-          candidate.tag = cleanTag;
-        }
-      }
+      applyTagToFileRecord(fileRecord, faceIds, cleanTag);
       await saveFile(fileRecord);
       finishActivity(activityId, "done", `${faceIds.length} face${faceIds.length === 1 ? "" : "s"} updated`);
       return;
@@ -962,8 +1004,14 @@ async function saveFaceTag(fileRecord, face, tag) {
         setProgress(`Tagged ${payload.propagated + 1} matching faces.`, 100);
       }
       const updatedFile = state.files.get(fileRecord.id);
-      if (shouldRerenderAfterTag(updatedFile) || !replaceGalleryCard(fileRecord.id)) {
+      if (updatedFile) {
+        applyTagToFileRecord(updatedFile, faceIds, cleanTag);
+      }
+      const currentFile = syncFileRecord(fileRecord, updatedFile);
+      if (shouldRerenderAfterTag(currentFile) || !replaceGalleryCard(fileRecord.id)) {
         renderCurrentView({ preserveScroll: true });
+      } else {
+        refreshRenderedFaceTags();
       }
     }
     finishActivity(activityId, "done", `${faceIds.length} face${faceIds.length === 1 ? "" : "s"} updated`);

@@ -1,0 +1,477 @@
+{
+  "info": {
+    "_postman_id": "7f1b8a1d-6fae-44e7-b42c-local-face-photos",
+    "name": "Local Face Photos API",
+    "description": "Postman collection for testing the Local Face Photos backend APIs individually. Start the app with `make run` or `./run.sh`, then use `{{baseUrl}}` as the local server URL.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000",
+      "type": "string"
+    },
+    {
+      "key": "scanPath",
+      "value": "/Users/you/Pictures/Photo Library",
+      "type": "string"
+    },
+    {
+      "key": "scanMode",
+      "value": "photos",
+      "type": "string",
+      "description": "Supported values: photos, videos, both"
+    },
+    {
+      "key": "fileId",
+      "value": "",
+      "type": "string",
+      "description": "A file id/path from GET /api/files."
+    },
+    {
+      "key": "faceId",
+      "value": "",
+      "type": "string",
+      "description": "A face id from GET /api/files."
+    },
+    {
+      "key": "tagName",
+      "value": "Alex",
+      "type": "string"
+    },
+    {
+      "key": "mediaPath",
+      "value": "",
+      "type": "string",
+      "description": "A local media path from GET /api/files. Used by GET /api/media."
+    },
+    {
+      "key": "searchYear",
+      "value": "2022",
+      "type": "string"
+    },
+    {
+      "key": "searchCity",
+      "value": "Toronto",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /api/health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "description": "Returns backend readiness, engine name, available ONNX providers, requested providers, and dependency errors."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('health payload has ok flag', function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('ok');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Index",
+      "item": [
+        {
+          "name": "GET /api/files",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/files",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "files"
+              ]
+            },
+            "description": "Returns every indexed file with metadata, place data, and representative face records. The test script captures sample `fileId`, `mediaPath`, and `faceId` collection variables when records exist."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const files = pm.response.json();",
+                  "pm.test('response is an array', function () {",
+                  "  pm.expect(files).to.be.an('array');",
+                  "});",
+                  "if (Array.isArray(files) && files.length) {",
+                  "  const firstFile = files[0];",
+                  "  pm.collectionVariables.set('fileId', firstFile.id || firstFile.path || '');",
+                  "  pm.collectionVariables.set('mediaPath', firstFile.path || '');",
+                  "  const fileWithFace = files.find((file) => Array.isArray(file.faces) && file.faces.length);",
+                  "  if (fileWithFace) {",
+                  "    pm.collectionVariables.set('fileId', fileWithFace.id || fileWithFace.path || '');",
+                  "    pm.collectionVariables.set('mediaPath', fileWithFace.path || '');",
+                  "    pm.collectionVariables.set('faceId', fileWithFace.faces[0].id || '');",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/scan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{scanPath}}\",\n  \"scanMode\": \"{{scanMode}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/scan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "scan"
+              ]
+            },
+            "description": "Scans a local folder. `scanMode` supports `photos`, `videos`, or `both`. Large libraries and videos can take a while."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('scan request completed', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 400]);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (body.ok && Array.isArray(body.files) && body.files.length) {",
+                  "  pm.collectionVariables.set('fileId', body.files[0].id || body.files[0].path || '');",
+                  "  pm.collectionVariables.set('mediaPath', body.files[0].path || '');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/clear",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/clear",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clear"
+              ]
+            },
+            "description": "Clears the local SQLite index. This is destructive for the current local index, but does not delete original media files."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Search",
+      "item": [
+        {
+          "name": "GET /api/search?year={{searchYear}}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/search?year={{searchYear}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "{{searchYear}}"
+                }
+              ]
+            },
+            "description": "Searches indexed files by `photo_metadata.taken_at` year."
+          }
+        },
+        {
+          "name": "GET /api/search?city={{searchCity}}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/search?city={{searchCity}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "city",
+                  "value": "{{searchCity}}"
+                }
+              ]
+            },
+            "description": "Searches indexed files by `photo_places.city`. City matching is case-insensitive."
+          }
+        },
+        {
+          "name": "GET /api/search?year={{searchYear}}&city={{searchCity}}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/search?year={{searchYear}}&city={{searchCity}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "{{searchYear}}"
+                },
+                {
+                  "key": "city",
+                  "value": "{{searchCity}}"
+                }
+              ]
+            },
+            "description": "Searches indexed files by both year and city."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Media",
+      "item": [
+        {
+          "name": "GET /api/media?path={{mediaPath}}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/media?path={{mediaPath}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "media"
+              ],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "{{mediaPath}}"
+                }
+              ]
+            },
+            "description": "Streams a local media file or generated thumbnail. Set `mediaPath` from `GET /api/files` first."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('media path returns success or expected not found', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Faces",
+      "item": [
+        {
+          "name": "POST /api/tag",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileId\": \"{{fileId}}\",\n  \"faceId\": \"{{faceId}}\",\n  \"tag\": \"{{tagName}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tag",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tag"
+              ]
+            },
+            "description": "Tags a face. For video clusters, the backend expands a representative face ID to the related cluster faces."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('tag request completed', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/ignore-face",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileId\": \"{{fileId}}\",\n  \"faceId\": \"{{faceId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/ignore-face",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ignore-face"
+              ]
+            },
+            "description": "Removes a face box from the current index and stores an ignored-face entry so it remains hidden on future scans."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ignore request completed', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/rescan-photo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileId\": \"{{fileId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/rescan-photo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rescan-photo"
+              ]
+            },
+            "description": "Rescans one indexed photo/video while preserving ignored faces."
+          }
+        },
+        {
+          "name": "POST /api/reset-ignored-faces",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileId\": \"{{fileId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/reset-ignored-faces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reset-ignored-faces"
+              ]
+            },
+            "description": "Clears ignored faces for one indexed file and rescans it."
+          }
+        }
+      ]
+    }
+  ]
+}

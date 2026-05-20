@@ -1,3 +1,4 @@
 insightface
 onnxruntime
 opencv-python
+pillow

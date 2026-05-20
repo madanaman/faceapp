@@ -50,9 +50,9 @@ class VideoClusteringTest(unittest.TestCase):
 
     def test_known_same_tag_clusters_merge(self):
         first = face("a", [1.0, 0.0, 0.0])
-        first["tag"] = "Divya"
+        first["tag"] = "Alex"
         second = face("b", [0.0, 1.0, 0.0])
-        second["tag"] = "divya"
+        second["tag"] = "alex"
         clusters = [
             {"id": "cluster-a", "faces": [first], "centroid": first["embedding"]},
             {"id": "cluster-b", "faces": [second], "centroid": second["embedding"]},

@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 import json
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from .config import DB_PATH, face_box_iou_threshold, face_reconcile_threshold, match_threshold
@@ -342,7 +342,7 @@ def metadata_needs_refresh(conn: sqlite3.Connection, photo_id: str) -> bool:
 
 
 def save_file(conn: sqlite3.Connection, record: dict) -> None:
-    now = datetime.utcnow().isoformat(timespec="seconds")
+    now = datetime.now(UTC).isoformat(timespec="seconds")
     conn.execute(
         """
         insert into photos (id, path, name, type, signature, width, height, duration_seconds, indexed_at)
@@ -512,7 +512,7 @@ def ignore_face(conn: sqlite3.Connection, file_id: str, face_id: str) -> bool:
         (face_id,),
     ).fetchone()
 
-    now = datetime.utcnow().isoformat(timespec="seconds")
+    now = datetime.now(UTC).isoformat(timespec="seconds")
     ignored_rows = rows
     if row["cluster_id"]:
         cluster_row = conn.execute("select * from face_clusters where id = ?", (row["cluster_id"],)).fetchone()
@@ -697,7 +697,7 @@ def get_or_create_person(conn: sqlite3.Connection, name: str) -> int:
 
     cursor = conn.execute(
         "insert into people (name, created_at) values (?, ?)",
-        (name, datetime.utcnow().isoformat(timespec="seconds")),
+        (name, datetime.now(UTC).isoformat(timespec="seconds")),
     )
     return int(cursor.lastrowid)
 

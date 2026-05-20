@@ -2,6 +2,8 @@
 .cache/
 __pycache__/
 *.pyc
+.DS_Store
+.env
 face_index.sqlite3
 face_index.sqlite3-shm
 face_index.sqlite3-wal
