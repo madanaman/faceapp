@@ -158,8 +158,17 @@ test("tag save patches the edited gallery card instead of rerendering every medi
   assert.match(appJs, /card\.dataset\.fileId = fileRecord\.id/);
   assert.match(appJs, /function replaceGalleryCard\(fileId\)/);
   assert.match(appJs, /card\.replaceWith\(renderPhoto\(fileRecord\)\)/);
+  assert.match(appJs, /function applyTagToFileRecord\(fileRecord, faceIds, tag\)/);
+  assert.match(appJs, /function syncFileRecord\(fileRecord, updatedFile\)/);
+  assert.match(appJs, /function refreshRenderedFaceTags\(\)/);
+  assert.match(appJs, /Object\.assign\(fileRecord, updatedFile\)/);
+  assert.match(appJs, /chip\.dataset\.faceId = face\.id/);
+  assert.match(appJs, /box\.dataset\.faceId = face\.id/);
+  assert.match(appJs, /tagsByFaceId\.get\(chip\.dataset\.faceId\)/);
+  assert.match(appJs, /input\.value = tag/);
   assert.match(appJs, /function shouldRerenderAfterTag\(fileRecord\)/);
-  assert.match(appJs, /if \(shouldRerenderAfterTag\(updatedFile\) \|\| !replaceGalleryCard\(fileRecord\.id\)\)/);
+  assert.match(appJs, /if \(shouldRerenderAfterTag\(currentFile\) \|\| !replaceGalleryCard\(fileRecord\.id\)\)/);
+  assert.match(appJs, /refreshRenderedFaceTags\(\)/);
 });
 
 test("local static script tag does not rely on manual cache-bust strings", () => {
