@@ -1,0 +1,133 @@
+<mxfile host="Electron" agent="Codex">
+  <diagram id="local-face-library-architecture" name="Architecture Flow">
+    <mxGraphModel dx="2037" dy="1335" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=50;fontStyle=1;fontColor=#1e2d29;" value="Local Face Library: High Level Architecture Flow" vertex="1">
+          <mxGeometry height="60" width="1285" x="65" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=27;fontColor=#596a65;" value="Private, local-first face search for photos and videos" vertex="1">
+          <mxGeometry height="40" width="760" x="77" y="118" as="geometry" />
+        </mxCell>
+        <mxCell id="folder" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=13;fillColor=#ffffff;strokeColor=#cbd8d3;strokeWidth=2;fontColor=#1e2d29;align=left;verticalAlign=top;spacing=24;shadow=1;" value="&lt;font style=&quot;font-size: 17px; color: #ffffff;&quot;&gt;&lt;b&gt; INPUT &lt;/b&gt;&lt;/font&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;&lt;font style=&quot;font-size: 28px;&quot;&gt;Local Folder&lt;/font&gt;&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size: 20px; color: #596a65;&quot;&gt;Select folders from your own photo library.&lt;/font&gt;" vertex="1">
+          <mxGeometry height="205" width="305" x="70" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="folderBadge" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#0a8f6b;strokeColor=#0a8f6b;fontColor=#ffffff;fontSize=17;fontStyle=1;" value="INPUT" vertex="1">
+          <mxGeometry height="30" width="76" x="95" y="215" as="geometry" />
+        </mxCell>
+        <mxCell id="scanner" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=13;fillColor=#ffffff;strokeColor=#cbd8d3;strokeWidth=2;fontColor=#1e2d29;align=left;verticalAlign=top;spacing=24;shadow=1;" value="&lt;div&gt;&lt;b&gt;&lt;font style=&quot;font-size: 28px;&quot;&gt;&lt;br&gt;&lt;/font&gt;&lt;/b&gt;&lt;/div&gt;&lt;b&gt;&lt;font style=&quot;font-size: 28px;&quot;&gt;Scanner&lt;/font&gt;&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size: 20px; color: rgb(89, 106, 101);&quot;&gt;Reads files, metadata, and sampled video frames.&lt;/font&gt;" vertex="1">
+          <mxGeometry height="205" width="305" x="445" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="scannerBadge" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#2e6f9f;strokeColor=#2e6f9f;fontColor=#ffffff;fontSize=17;fontStyle=1;" value="BACKEND" vertex="1">
+          <mxGeometry height="30" width="110" x="460" y="215" as="geometry" />
+        </mxCell>
+        <mxCell id="insightface" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=13;fillColor=#e3f0f8;strokeColor=#cbd8d3;strokeWidth=2;fontColor=#1e2d29;align=left;verticalAlign=top;spacing=24;shadow=1;" value="&lt;div&gt;&lt;b&gt;&lt;font style=&quot;font-size: 28px;&quot;&gt;&lt;br&gt;&lt;/font&gt;&lt;/b&gt;&lt;/div&gt;&lt;b&gt;&lt;font style=&quot;font-size: 28px;&quot;&gt;InsightFace&lt;/font&gt;&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size: 20px; color: rgb(89, 106, 101);&quot;&gt;Detects faces and creates matching embeddings.&lt;/font&gt;" vertex="1">
+          <mxGeometry height="205" width="305" x="820" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="insightfaceBadge" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#2e6f9f;strokeColor=#2e6f9f;fontColor=#ffffff;fontSize=17;fontStyle=1;" value="AI ENGINE" vertex="1">
+          <mxGeometry height="30" width="112" x="830" y="215" as="geometry" />
+        </mxCell>
+        <mxCell id="sqlite" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=13;fillColor=#ffffff;strokeColor=#cbd8d3;strokeWidth=2;fontColor=#1e2d29;align=left;verticalAlign=top;spacing=24;shadow=1;" value="&lt;div&gt;&lt;b&gt;&lt;font style=&quot;font-size: 28px;&quot;&gt;&lt;br&gt;&lt;/font&gt;&lt;/b&gt;&lt;/div&gt;&lt;b&gt;&lt;font style=&quot;font-size: 28px;&quot;&gt;SQLite Index&lt;/font&gt;&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size: 20px; color: rgb(89, 106, 101);&quot;&gt;Stores media, faces, tags, dates, places, and ignored boxes.&lt;/font&gt;" vertex="1">
+          <mxGeometry height="205" width="325" x="1195" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="sqliteBadge" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#b86b18;strokeColor=#b86b18;fontColor=#ffffff;fontSize=17;fontStyle=1;" value="LOCAL DB" vertex="1">
+          <mxGeometry height="30" width="110" x="1210" y="215" as="geometry" />
+        </mxCell>
+        <mxCell id="gallery" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=13;fillColor=#ffffff;strokeColor=#cbd8d3;strokeWidth=2;fontColor=#1e2d29;align=left;verticalAlign=top;spacing=24;shadow=1;" value="&lt;div&gt;&lt;b&gt;&lt;font style=&quot;font-size: 28px;&quot;&gt;&lt;br&gt;&lt;/font&gt;&lt;/b&gt;&lt;/div&gt;&lt;b&gt;&lt;font style=&quot;font-size: 28px;&quot;&gt;Gallery UI&lt;/font&gt;&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size: 20px; color: rgb(89, 106, 101);&quot;&gt;Browse thumbnails, face crops, filters, progress, and activity.&lt;/font&gt;" vertex="1">
+          <mxGeometry height="205" width="330" x="210" y="545" as="geometry" />
+        </mxCell>
+        <mxCell id="galleryBadge" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#0a8f6b;strokeColor=#0a8f6b;fontColor=#ffffff;fontSize=17;fontStyle=1;" value="BROWSER" vertex="1">
+          <mxGeometry height="30" width="112" x="235" y="567" as="geometry" />
+        </mxCell>
+        <mxCell id="tagOnce" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=13;fillColor=#dff5ee;strokeColor=#cbd8d3;strokeWidth=2;fontColor=#1e2d29;align=left;verticalAlign=top;spacing=24;shadow=1;" value="&lt;div&gt;&lt;b&gt;&lt;font style=&quot;font-size: 28px;&quot;&gt;&lt;br&gt;&lt;/font&gt;&lt;/b&gt;&lt;/div&gt;&lt;b&gt;&lt;font style=&quot;font-size: 28px;&quot;&gt;Tag Once&lt;/font&gt;&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size: 20px; color: rgb(89, 106, 101);&quot;&gt;Manual tags propagate to similar faces and video clusters.&lt;/font&gt;" vertex="1">
+          <mxGeometry height="205" width="330" x="635" y="545" as="geometry" />
+        </mxCell>
+        <mxCell id="tagBadge" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#0a8f6b;strokeColor=#0a8f6b;fontColor=#ffffff;fontSize=17;fontStyle=1;" value="TAGGING" vertex="1">
+          <mxGeometry height="30" width="108" x="660" y="567" as="geometry" />
+        </mxCell>
+        <mxCell id="search" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=13;fillColor=#ffffff;strokeColor=#cbd8d3;strokeWidth=2;fontColor=#1e2d29;align=left;verticalAlign=top;spacing=24;shadow=1;" value="&lt;div&gt;&lt;b&gt;&lt;font style=&quot;font-size: 28px;&quot;&gt;&lt;br&gt;&lt;/font&gt;&lt;/b&gt;&lt;/div&gt;&lt;b&gt;&lt;font style=&quot;font-size: 28px;&quot;&gt;Search Locally&lt;/font&gt;&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size: 20px; color: rgb(89, 106, 101);&quot;&gt;Find one person, multiple people, dates, years, or media type.&lt;/font&gt;" vertex="1">
+          <mxGeometry height="205" width="330" x="1060" y="545" as="geometry" />
+        </mxCell>
+        <mxCell id="searchBadge" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#0a8f6b;strokeColor=#0a8f6b;fontColor=#ffffff;fontSize=17;fontStyle=1;" value="OUTPUT" vertex="1">
+          <mxGeometry height="30" width="96" x="1085" y="567" as="geometry" />
+        </mxCell>
+        <mxCell id="a1" edge="1" parent="1" source="folder" style="endArrow=block;html=1;rounded=0;strokeWidth=5;strokeColor=#075f4d;" target="scanner" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" edge="1" parent="1" source="scanner" style="endArrow=block;html=1;rounded=0;strokeWidth=5;strokeColor=#075f4d;" target="insightface" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" edge="1" parent="1" source="insightface" style="endArrow=block;html=1;rounded=0;strokeWidth=5;strokeColor=#075f4d;" target="sqlite" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dbToUi" edge="1" parent="1" source="sqlite" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#8ea59f;exitX=0.25;exitY=1;exitDx=0;exitDy=0;edgeStyle=orthogonalEdgeStyle;" target="gallery" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1276" y="450" />
+              <mxPoint x="375" y="450" />
+            </Array>
+            <mxPoint x="1358" y="405" as="sourcePoint" />
+            <mxPoint x="420" y="545" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="uiToTag" edge="1" parent="1" source="gallery" style="endArrow=block;html=1;rounded=0;strokeWidth=5;strokeColor=#075f4d;" target="tagOnce" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="tagToSearch" edge="1" parent="1" source="tagOnce" style="endArrow=block;html=1;rounded=0;strokeWidth=5;strokeColor=#075f4d;" target="search" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="tagToDb" edge="1" parent="1" source="tagOnce" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#b86b18;edgeStyle=orthogonalEdgeStyle;" target="sqlite" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="800" y="500" />
+              <mxPoint x="1358" y="500" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="searchToDb" edge="1" parent="1" source="search" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#8ea59f;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;" target="sqlite" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="stepStrip" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#ffffff;strokeColor=#cbd8d3;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="88" width="1340" x="130" y="830" as="geometry" />
+        </mxCell>
+        <mxCell id="s1Circle" parent="1" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#0a8f6b;strokeColor=#0a8f6b;fontColor=#ffffff;fontSize=19;" value="1" vertex="1">
+          <mxGeometry height="44" width="44" x="190" y="855" as="geometry" />
+        </mxCell>
+        <mxCell id="s1Text" parent="1" style="text;html=1;strokeColor=none;fillColor=none;fontSize=21;fontStyle=1;fontColor=#1e2d29;align=left;verticalAlign=middle;" value="Scan local media" vertex="1">
+          <mxGeometry height="32" width="190" x="248" y="862" as="geometry" />
+        </mxCell>
+        <mxCell id="s2Circle" parent="1" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#0a8f6b;strokeColor=#0a8f6b;fontColor=#ffffff;fontSize=19;" value="2" vertex="1">
+          <mxGeometry height="44" width="44" x="455" y="855" as="geometry" />
+        </mxCell>
+        <mxCell id="s2Text" parent="1" style="text;html=1;strokeColor=none;fillColor=none;fontSize=21;fontStyle=1;fontColor=#1e2d29;align=left;verticalAlign=middle;" value="Detect faces" vertex="1">
+          <mxGeometry height="32" width="160" x="513" y="862" as="geometry" />
+        </mxCell>
+        <mxCell id="s3Circle" parent="1" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#0a8f6b;strokeColor=#0a8f6b;fontColor=#ffffff;fontSize=19;" value="3" vertex="1">
+          <mxGeometry height="44" width="44" x="700" y="855" as="geometry" />
+        </mxCell>
+        <mxCell id="s3Text" parent="1" style="text;html=1;strokeColor=none;fillColor=none;fontSize=21;fontStyle=1;fontColor=#1e2d29;align=left;verticalAlign=middle;" value="Cluster video faces" vertex="1">
+          <mxGeometry height="32" width="220" x="758" y="862" as="geometry" />
+        </mxCell>
+        <mxCell id="s4Circle" parent="1" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#0a8f6b;strokeColor=#0a8f6b;fontColor=#ffffff;fontSize=19;" value="4" vertex="1">
+          <mxGeometry height="44" width="44" x="985" y="855" as="geometry" />
+        </mxCell>
+        <mxCell id="s4Text" parent="1" style="text;html=1;strokeColor=none;fillColor=none;fontSize=21;fontStyle=1;fontColor=#1e2d29;align=left;verticalAlign=middle;" value="Tag people" vertex="1">
+          <mxGeometry height="32" width="145" x="1043" y="862" as="geometry" />
+        </mxCell>
+        <mxCell id="s5Circle" parent="1" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#0a8f6b;strokeColor=#0a8f6b;fontColor=#ffffff;fontSize=19;" value="5" vertex="1">
+          <mxGeometry height="44" width="44" x="1235" y="855" as="geometry" />
+        </mxCell>
+        <mxCell id="s5Text" parent="1" style="text;html=1;strokeColor=none;fillColor=none;fontSize=21;fontStyle=1;fontColor=#1e2d29;align=left;verticalAlign=middle;" value="Search locally" vertex="1">
+          <mxGeometry height="32" width="170" x="1293" y="862" as="geometry" />
+        </mxCell>
+        <mxCell id="footer" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=27;fontColor=#075f4d;fontStyle=1" value="Built for local photo ownership: face search without renting cloud storage." vertex="1">
+          <mxGeometry height="40" width="1100" x="75" y="950" as="geometry" />
+        </mxCell>
+        <mxCell id="M8ICOkkLpc79EFkP3Gmn-1" parent="1" style="ellipse;shape=cloud;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" value="&lt;b style=&quot;color: rgb(7, 95, 77); font-size: 28px; text-align: left;&quot;&gt;No cloud upload&lt;/b&gt;&lt;br style=&quot;color: rgb(7, 95, 77); font-size: 28px; text-align: left;&quot;&gt;&lt;font style=&quot;color: rgb(7, 95, 77); text-align: left; font-size: 19px;&quot;&gt;&lt;u&gt;Media stays on your machine&lt;/u&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="123" width="450" x="1132.5" y="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
