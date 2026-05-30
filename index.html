@@ -37,8 +37,8 @@
           <button id="scanPathBtn" class="primary">Scan Path</button>
         </div>
         <div class="search-row">
-          <label for="searchInput">Search people</label>
-          <input id="searchInput" type="search" placeholder="Alex, Jordan">
+          <label for="searchInput">Search library</label>
+          <input id="searchInput" type="search" placeholder="Alex, Malaysia Trip, first birthday">
           <button id="searchBtn">Search</button>
           <button id="showAllBtn" class="ghost">Show All</button>
         </div>
@@ -90,12 +90,28 @@
             </div>
             <div id="peopleList" class="people-list"></div>
           </section>
+          <section class="side-section">
+            <div class="panel-title">
+              <h2>Albums</h2>
+            </div>
+            <div class="collection-create">
+              <input id="albumNameInput" type="text" placeholder="Malaysia Trip">
+              <button id="createAlbumBtn" class="mini" type="button">Add</button>
+            </div>
+            <div id="albumList" class="people-list"></div>
+          </section>
+          <section class="side-section">
+            <div class="panel-title">
+              <h2>Photo Tags</h2>
+            </div>
+            <div id="photoTagList" class="people-list"></div>
+          </section>
         </aside>
 
         <section class="gallery-shell">
           <div class="panel-title">
             <h2 id="galleryTitle">Matches</h2>
-            <span id="galleryHint">Search uses AND matching for multiple names.</span>
+            <span id="galleryHint">Separate people, albums, and photo tags with commas. All terms must match.</span>
           </div>
           <div class="gallery-toolbar" aria-label="Gallery filters">
             <label>
@@ -181,6 +197,16 @@
           <div class="photo-actions">
             <button class="rescan-photo" type="button">Rescan faces</button>
             <button class="reset-ignored" type="button">Reset ignored</button>
+          </div>
+          <div class="photo-collections">
+            <div class="photo-tag-chips"></div>
+            <div class="photo-collection-row">
+              <select class="album-select" aria-label="Add photo to album"></select>
+            </div>
+            <div class="photo-collection-row">
+              <input class="custom-tag-input" type="text" placeholder="Aman's first birthday">
+              <button class="add-custom-tag mini" type="button">Add tag</button>
+            </div>
           </div>
         </div>
         <div class="bulk-face-actions" hidden>
