@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from .config import DB_PATH, face_box_iou_threshold, face_reconcile_threshold, match_threshold
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 def connect() -> sqlite3.Connection:
@@ -120,6 +120,37 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
             source text
         );
 
+        create table if not exists albums (
+            id integer primary key autoincrement,
+            name text not null collate nocase unique,
+            description text,
+            cover_photo_id text references photos(id) on delete set null,
+            created_at text not null,
+            updated_at text not null
+        );
+
+        create table if not exists album_photos (
+            album_id integer not null references albums(id) on delete cascade,
+            photo_id text not null references photos(id) on delete cascade,
+            added_at text not null,
+            sort_order integer,
+            primary key (album_id, photo_id)
+        );
+
+        create table if not exists photo_tags (
+            id integer primary key autoincrement,
+            name text not null collate nocase unique,
+            kind text not null default 'custom',
+            created_at text not null
+        );
+
+        create table if not exists photo_tag_links (
+            photo_id text not null references photos(id) on delete cascade,
+            tag_id integer not null references photo_tags(id) on delete cascade,
+            created_at text not null,
+            primary key (photo_id, tag_id)
+        );
+
         create index if not exists idx_photos_signature on photos(signature);
         create index if not exists idx_faces_photo_id on faces(photo_id);
         create index if not exists idx_face_clusters_photo_id on face_clusters(photo_id);
@@ -128,6 +159,8 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         create index if not exists idx_photo_places_city on photo_places(city);
         create index if not exists idx_face_people_person_id on face_people(person_id);
         create index if not exists idx_ignored_faces_photo_id on ignored_faces(photo_id);
+        create index if not exists idx_album_photos_photo_id on album_photos(photo_id);
+        create index if not exists idx_photo_tag_links_tag_id on photo_tag_links(tag_id);
         """
     )
 
@@ -198,7 +231,13 @@ def list_files(conn: sqlite3.Connection) -> list[dict]:
     return [photo_to_record(conn, row) for row in rows]
 
 
-def search_files(conn: sqlite3.Connection, year: str | None = None, city: str | None = None) -> list[dict]:
+def search_files(
+    conn: sqlite3.Connection,
+    year: str | None = None,
+    city: str | None = None,
+    album: str | None = None,
+    tag: str | None = None,
+) -> list[dict]:
     clauses = []
     params = []
 
@@ -211,6 +250,32 @@ def search_files(conn: sqlite3.Connection, year: str | None = None, city: str | 
     if city:
         clauses.append("lower(pl.city) = lower(?)")
         params.append(city)
+
+    if album:
+        clauses.append(
+            """
+            exists (
+                select 1
+                from album_photos ap
+                join albums a on a.id = ap.album_id
+                where ap.photo_id = p.id and lower(a.name) = lower(?)
+            )
+            """
+        )
+        params.append(album)
+
+    if tag:
+        clauses.append(
+            """
+            exists (
+                select 1
+                from photo_tag_links ptl
+                join photo_tags pt on pt.id = ptl.tag_id
+                where ptl.photo_id = p.id and lower(pt.name) = lower(?)
+            )
+            """
+        )
+        params.append(tag)
 
     where = f"where {' and '.join(clauses)}" if clauses else ""
     rows = conn.execute(
@@ -238,6 +303,144 @@ def find_current_file(conn: sqlite3.Connection, file_id: str, signature: str) ->
     ).fetchone()
 
 
+def list_albums(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        """
+        select a.*, count(ap.photo_id) as photo_count
+        from albums a
+        left join album_photos ap on ap.album_id = a.id
+        group by a.id
+        order by lower(a.name)
+        """
+    ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "description": row["description"] or "",
+            "coverPhotoId": row["cover_photo_id"] or "",
+            "photoCount": row["photo_count"],
+        }
+        for row in rows
+    ]
+
+
+def create_album(conn: sqlite3.Connection, name: str, description: str = "") -> dict:
+    clean_name = name.strip()
+    if not clean_name:
+        raise ValueError("Album name is required")
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    conn.execute(
+        """
+        insert into albums (name, description, created_at, updated_at)
+        values (?, ?, ?, ?)
+        on conflict(name) do update set
+            description = case
+                when excluded.description != '' then excluded.description
+                else albums.description
+            end,
+            updated_at = excluded.updated_at
+        """,
+        (clean_name, description.strip(), now, now),
+    )
+    row = conn.execute("select id from albums where name = ? collate nocase", (clean_name,)).fetchone()
+    return next(album for album in list_albums(conn) if album["id"] == row["id"])
+
+
+def list_photo_albums(conn: sqlite3.Connection, photo_id: str) -> list[dict]:
+    rows = conn.execute(
+        """
+        select a.id, a.name
+        from albums a
+        join album_photos ap on ap.album_id = a.id
+        where ap.photo_id = ?
+        order by lower(a.name)
+        """,
+        (photo_id,),
+    ).fetchall()
+    return [{"id": row["id"], "name": row["name"]} for row in rows]
+
+
+def add_photo_to_album(conn: sqlite3.Connection, album_id: int, photo_id: str) -> None:
+    if not find_file(conn, photo_id):
+        raise ValueError("Photo not found")
+    if not conn.execute("select 1 from albums where id = ?", (album_id,)).fetchone():
+        raise ValueError("Album not found")
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    conn.execute(
+        "insert or ignore into album_photos (album_id, photo_id, added_at) values (?, ?, ?)",
+        (album_id, photo_id, now),
+    )
+    conn.execute("update albums set updated_at = ? where id = ?", (now, album_id))
+
+
+def remove_photo_from_album(conn: sqlite3.Connection, album_id: int, photo_id: str) -> None:
+    conn.execute("delete from album_photos where album_id = ? and photo_id = ?", (album_id, photo_id))
+
+
+def list_tags(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        """
+        select pt.*, count(ptl.photo_id) as photo_count
+        from photo_tags pt
+        left join photo_tag_links ptl on ptl.tag_id = pt.id
+        group by pt.id
+        order by lower(pt.name)
+        """
+    ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "kind": row["kind"],
+            "photoCount": row["photo_count"],
+        }
+        for row in rows
+    ]
+
+
+def create_photo_tag(conn: sqlite3.Connection, name: str, kind: str = "custom") -> dict:
+    clean_name = name.strip()
+    if not clean_name:
+        raise ValueError("Photo tag is required")
+    clean_kind = kind.strip() or "custom"
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    conn.execute(
+        "insert or ignore into photo_tags (name, kind, created_at) values (?, ?, ?)",
+        (clean_name, clean_kind, now),
+    )
+    row = conn.execute("select id from photo_tags where name = ? collate nocase", (clean_name,)).fetchone()
+    return next(tag for tag in list_tags(conn) if tag["id"] == row["id"])
+
+
+def list_photo_tags(conn: sqlite3.Connection, photo_id: str) -> list[dict]:
+    rows = conn.execute(
+        """
+        select pt.id, pt.name, pt.kind
+        from photo_tags pt
+        join photo_tag_links ptl on ptl.tag_id = pt.id
+        where ptl.photo_id = ?
+        order by lower(pt.name)
+        """,
+        (photo_id,),
+    ).fetchall()
+    return [{"id": row["id"], "name": row["name"], "kind": row["kind"]} for row in rows]
+
+
+def add_photo_tag(conn: sqlite3.Connection, photo_id: str, name: str, kind: str = "custom") -> None:
+    if not find_file(conn, photo_id):
+        raise ValueError("Photo not found")
+    tag = create_photo_tag(conn, name, kind=kind)
+    conn.execute(
+        "insert or ignore into photo_tag_links (photo_id, tag_id, created_at) values (?, ?, ?)",
+        (photo_id, tag["id"], datetime.now(UTC).isoformat(timespec="seconds")),
+    )
+
+
+def remove_photo_tag(conn: sqlite3.Connection, photo_id: str, tag_id: int) -> None:
+    conn.execute("delete from photo_tag_links where photo_id = ? and tag_id = ?", (photo_id, tag_id))
+
+
 def photo_to_record(conn: sqlite3.Connection, photo_row: sqlite3.Row) -> dict:
     metadata = conn.execute("select * from photo_metadata where photo_id = ?", (photo_row["id"],)).fetchone()
     place = conn.execute("select * from photo_places where photo_id = ?", (photo_row["id"],)).fetchone()
@@ -251,6 +454,8 @@ def photo_to_record(conn: sqlite3.Connection, photo_row: sqlite3.Row) -> dict:
         "height": photo_row["height"],
         "durationSeconds": photo_row["duration_seconds"] if "duration_seconds" in photo_row.keys() else None,
         "faces": list_faces(conn, photo_row["id"]),
+        "albums": list_photo_albums(conn, photo_row["id"]),
+        "tags": list_photo_tags(conn, photo_row["id"]),
         "metadata": row_dict(metadata) if metadata else {},
         "place": row_dict(place) if place else {},
     }
@@ -748,6 +953,10 @@ def clear_files(conn: sqlite3.Connection) -> None:
     conn.execute("delete from people")
     conn.execute("delete from face_clusters")
     conn.execute("delete from faces")
+    conn.execute("delete from album_photos")
+    conn.execute("delete from photo_tag_links")
+    conn.execute("delete from albums")
+    conn.execute("delete from photo_tags")
     conn.execute("delete from photo_places")
     conn.execute("delete from photo_metadata")
     conn.execute("delete from photos")

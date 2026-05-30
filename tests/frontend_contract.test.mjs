@@ -180,3 +180,29 @@ test("video cluster tag save sends only one backend request", () => {
   assert.match(appJs, /body: JSON\.stringify\(\{ fileId: fileRecord\.id, faceId: faceIds\[0\], tag: cleanTag \}\)/);
   assert.doesNotMatch(appJs, /for \(const faceId of faceIds\)[\s\S]*\/api\/tag/);
 });
+
+test("albums and descriptive photo tags are available from the gallery", () => {
+  assert.match(html, /id="albumNameInput"/);
+  assert.match(html, /id="createAlbumBtn"/);
+  assert.match(html, /id="albumList"/);
+  assert.match(html, /id="photoTagList"/);
+  assert.match(html, /class="album-select"/);
+  assert.doesNotMatch(html, /class="add-album/);
+  assert.match(html, /class="custom-tag-input"/);
+  assert.match(appJs, /fetch\("\/api\/albums"\)/);
+  assert.match(appJs, /fetch\("\/api\/photo-tags"\)/);
+  assert.match(appJs, /postLibraryMutation\("\/api\/albums\/photos"/);
+  assert.match(appJs, /albumSelect\.addEventListener\("change", \(\) => addPhotoToAlbum\(fileRecord, albumSelect\)\)/);
+  assert.match(appJs, /className = "remove-collection-chip"/);
+  assert.match(appJs, /deleteLibraryMutation\("\/api\/albums\/photos"/);
+  assert.match(appJs, /postLibraryMutation\("\/api\/photos\/tags"/);
+  assert.match(appJs, /function removeCustomPhotoTag\(fileRecord, tagId, tagName, button\)/);
+  assert.match(appJs, /deleteLibraryMutation\("\/api\/photos\/tags"/);
+});
+
+test("library search includes people albums and custom photo tags", () => {
+  assert.match(appJs, /function matchesPeople\(fileRecord, terms\)/);
+  assert.match(appJs, /\.\.\.\(fileRecord\.albums \|\| \[\]\)\.map\(\(album\) => normalizeName\(album\.name\)\)/);
+  assert.match(appJs, /\.\.\.\(fileRecord\.tags \|\| \[\]\)\.map\(\(tag\) => normalizeName\(tag\.name\)\)/);
+  assert.match(appJs, /function matchesSelectedAlbum\(fileRecord\)/);
+});

@@ -54,6 +54,26 @@
       "key": "searchCity",
       "value": "Toronto",
       "type": "string"
+    },
+    {
+      "key": "albumId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "albumName",
+      "value": "Malaysia Trip",
+      "type": "string"
+    },
+    {
+      "key": "photoTagName",
+      "value": "Aman's first birthday",
+      "type": "string"
+    },
+    {
+      "key": "photoTagId",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -288,6 +308,109 @@
               ]
             },
             "description": "Searches indexed files by both year and city."
+          }
+        },
+        {
+          "name": "GET /api/search?album={{albumName}}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/search?album={{albumName}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "search"],
+              "query": [{"key": "album", "value": "{{albumName}}"}]
+            },
+            "description": "Searches indexed files by album name."
+          }
+        },
+        {
+          "name": "GET /api/search?tag={{photoTagName}}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/search?tag={{photoTagName}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "search"],
+              "query": [{"key": "tag", "value": "{{photoTagName}}"}]
+            },
+            "description": "Searches indexed files by descriptive photo tag."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Albums and Photo Tags",
+      "item": [
+        {
+          "name": "GET /api/albums",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {"raw": "{{baseUrl}}/api/albums", "host": ["{{baseUrl}}"], "path": ["api", "albums"]}
+          }
+        },
+        {
+          "name": "POST /api/albums",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"{{albumName}}\"\n}"},
+            "url": {"raw": "{{baseUrl}}/api/albums", "host": ["{{baseUrl}}"], "path": ["api", "albums"]}
+          }
+        },
+        {
+          "name": "POST /api/albums/photos",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"albumId\": \"{{albumId}}\",\n  \"fileId\": \"{{fileId}}\"\n}"},
+            "url": {"raw": "{{baseUrl}}/api/albums/photos", "host": ["{{baseUrl}}"], "path": ["api", "albums", "photos"]}
+          }
+        },
+        {
+          "name": "DELETE /api/albums/photos",
+          "request": {
+            "method": "DELETE",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"albumId\": \"{{albumId}}\",\n  \"fileId\": \"{{fileId}}\"\n}"},
+            "url": {"raw": "{{baseUrl}}/api/albums/photos", "host": ["{{baseUrl}}"], "path": ["api", "albums", "photos"]}
+          }
+        },
+        {
+          "name": "GET /api/photo-tags",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {"raw": "{{baseUrl}}/api/photo-tags", "host": ["{{baseUrl}}"], "path": ["api", "photo-tags"]}
+          }
+        },
+        {
+          "name": "POST /api/photo-tags",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"{{photoTagName}}\"\n}"},
+            "url": {"raw": "{{baseUrl}}/api/photo-tags", "host": ["{{baseUrl}}"], "path": ["api", "photo-tags"]}
+          }
+        },
+        {
+          "name": "POST /api/photos/tags",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"fileId\": \"{{fileId}}\",\n  \"tag\": \"{{photoTagName}}\"\n}"},
+            "url": {"raw": "{{baseUrl}}/api/photos/tags", "host": ["{{baseUrl}}"], "path": ["api", "photos", "tags"]}
+          }
+        },
+        {
+          "name": "DELETE /api/photos/tags",
+          "request": {
+            "method": "DELETE",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"fileId\": \"{{fileId}}\",\n  \"tagId\": \"{{photoTagId}}\"\n}"},
+            "url": {"raw": "{{baseUrl}}/api/photos/tags", "host": ["{{baseUrl}}"], "path": ["api", "photos", "tags"]}
           }
         }
       ]

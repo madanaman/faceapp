@@ -10,10 +10,12 @@ const state = {
   db: null,
   files: new Map(),
   filteredIds: [],
+  albums: [],
+  photoTags: [],
   galleryCursor: 0,
   galleryObserver: null,
   lightboxIndex: 0,
-  currentView: { type: "all", title: "All Indexed Files", hint: "Search uses AND matching for multiple names.", terms: [] },
+  currentView: { type: "all", title: "All Indexed Files", hint: "Separate people, albums, and photo tags with commas. All terms must match.", terms: [] },
   activities: [],
   objectUrls: new Map(),
   support: {
@@ -42,6 +44,10 @@ const els = {
   progressPercent: document.querySelector("#progressPercent"),
   scanProgress: document.querySelector("#scanProgress"),
   peopleList: document.querySelector("#peopleList"),
+  albumNameInput: document.querySelector("#albumNameInput"),
+  createAlbumBtn: document.querySelector("#createAlbumBtn"),
+  albumList: document.querySelector("#albumList"),
+  photoTagList: document.querySelector("#photoTagList"),
   activityToggle: document.querySelector("#activityToggle"),
   activityPanel: document.querySelector("#activityPanel"),
   activityClose: document.querySelector("#activityClose"),
@@ -93,6 +99,10 @@ function bindEvents() {
   els.searchBtn.addEventListener("click", search);
   els.showAllBtn.addEventListener("click", showAll);
   els.untaggedBtn.addEventListener("click", showUntagged);
+  els.createAlbumBtn.addEventListener("click", createAlbum);
+  els.albumNameInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") createAlbum();
+  });
   els.mediaFilter.addEventListener("change", renderCurrentView);
   els.showNoFaceVideos.addEventListener("change", renderCurrentView);
   els.yearFilter.addEventListener("change", renderCurrentView);
@@ -172,12 +182,22 @@ async function checkBackend() {
 }
 
 async function restoreBackendIndex() {
-  const response = await fetch("/api/files");
-  const records = await response.json();
+  const [filesResponse, albumsResponse, tagsResponse] = await Promise.all([
+    fetch("/api/files"),
+    fetch("/api/albums"),
+    fetch("/api/photo-tags"),
+  ]);
+  const [records, albums, tags] = await Promise.all([
+    filesResponse.json(),
+    albumsResponse.json(),
+    tagsResponse.json(),
+  ]);
   state.files.clear();
   for (const record of records) {
     state.files.set(record.id, record);
   }
+  state.albums = albums;
+  state.photoTags = tags;
   populateYearFilter();
   if (records.length) {
     els.progressText.textContent = "Saved server index restored.";
@@ -234,7 +254,7 @@ function squareCrop(box, width, height) {
 function renderGallery(
   ids,
   title = "Matches",
-  hint = "Search uses AND matching for multiple names.",
+  hint = "Separate people, albums, and photo tags with commas. All terms must match.",
   initialBatchSize = GALLERY_BATCH_SIZE,
 ) {
   state.filteredIds = ids;
@@ -309,6 +329,10 @@ function renderPhoto(fileRecord) {
   const faces = fragment.querySelector(".faces");
   const rescanButton = fragment.querySelector(".rescan-photo");
   const resetIgnoredButton = fragment.querySelector(".reset-ignored");
+  const tagChips = fragment.querySelector(".photo-tag-chips");
+  const albumSelect = fragment.querySelector(".album-select");
+  const customTagInput = fragment.querySelector(".custom-tag-input");
+  const addCustomTagButton = fragment.querySelector(".add-custom-tag");
   const bulkBar = fragment.querySelector(".bulk-face-actions");
   const bulkCount = fragment.querySelector(".bulk-face-count");
   const bulkRemoveButton = fragment.querySelector(".bulk-remove-face");
@@ -324,6 +348,12 @@ function renderPhoto(fileRecord) {
   name.textContent = fileRecord.name;
   path.textContent = displayFileLocation(fileRecord.path);
   path.title = fileRecord.path;
+  renderPhotoCollectionControls(fileRecord, tagChips, albumSelect);
+  albumSelect.addEventListener("change", () => addPhotoToAlbum(fileRecord, albumSelect));
+  addCustomTagButton.addEventListener("click", () => addCustomPhotoTag(fileRecord, customTagInput, addCustomTagButton));
+  customTagInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") addCustomPhotoTag(fileRecord, customTagInput, addCustomTagButton);
+  });
   if (rescanButton) {
     rescanButton.addEventListener("click", () => rescanPhoto(fileRecord, false, rescanButton));
   }
@@ -366,6 +396,48 @@ function renderPhoto(fileRecord) {
   }
 
   return card;
+}
+
+function renderPhotoCollectionControls(fileRecord, tagChips, albumSelect) {
+  const chips = [
+    ...(fileRecord.albums || []).map((album) => ({ ...album, label: album.name, type: "album" })),
+    ...(fileRecord.tags || []).map((tag) => ({ ...tag, label: tag.name, type: "tag" })),
+  ];
+  tagChips.replaceChildren(
+    ...chips.map(({ id, label, type }) => {
+      const chip = document.createElement("span");
+      chip.className = `photo-tag-chip ${type}`;
+      const text = document.createElement("span");
+      text.textContent = type === "album" ? `Album: ${label}` : label;
+      chip.append(text);
+      if (type === "album" || type === "tag") {
+        const removeButton = document.createElement("button");
+        removeButton.className = "remove-collection-chip";
+        removeButton.type = "button";
+        const removeLabel = type === "album" ? `Remove from album ${label}` : `Remove photo tag ${label}`;
+        removeButton.setAttribute("aria-label", removeLabel);
+        removeButton.title = removeLabel;
+        removeButton.textContent = "×";
+        removeButton.addEventListener("click", () => {
+          if (type === "album") {
+            removePhotoFromAlbum(fileRecord, id, removeButton);
+          } else {
+            removeCustomPhotoTag(fileRecord, id, label, removeButton);
+          }
+        });
+        chip.append(removeButton);
+      }
+      return chip;
+    }),
+  );
+
+  const assignedAlbumIds = new Set((fileRecord.albums || []).map((album) => album.id));
+  albumSelect.replaceChildren(new Option("Choose album", ""));
+  for (const album of state.albums) {
+    if (!assignedAlbumIds.has(album.id)) {
+      albumSelect.append(new Option(album.name, String(album.id)));
+    }
+  }
 }
 
 function sortedFaces(faces) {
@@ -723,8 +795,8 @@ function search() {
     type: terms.length ? "search" : "all",
     title: terms.length ? `Search: ${terms.join(" + ")}` : "All Indexed Files",
     hint: terms.length
-      ? "Multiple names require every person to appear in the same file."
-      : "Search uses AND matching for multiple names.",
+      ? "Every person, album, or photo tag must match the same file."
+      : "Separate people, albums, and photo tags with commas. All terms must match.",
     terms,
   };
   applyGalleryFilters();
@@ -744,6 +816,7 @@ function matchesCurrentGalleryFilters(fileRecord) {
     matchesMediaFilter(fileRecord) &&
     matchesVisibleVideoFaces(fileRecord) &&
     matchesPeople(fileRecord, state.currentView.terms || []) &&
+    matchesSelectedAlbum(fileRecord) &&
     matchesDateFilters(fileRecord)
   );
 }
@@ -819,7 +892,7 @@ function showAll() {
   els.yearFilter.value = "";
   els.monthFilter.value = "";
   els.dateFilter.value = "";
-  state.currentView = { type: "all", title: "All Indexed Files", hint: "Search uses AND matching for multiple names.", terms: [] };
+  state.currentView = { type: "all", title: "All Indexed Files", hint: "Separate people, albums, and photo tags with commas. All terms must match.", terms: [] };
   applyGalleryFilters();
 }
 
@@ -842,8 +915,17 @@ function showUntagged() {
 
 function matchesPeople(fileRecord, terms) {
   if (!terms.length) return true;
-  const tags = new Set((fileRecord.faces || []).map((face) => normalizeName(face.tag)).filter(Boolean));
-  return terms.every((term) => tags.has(term));
+  const searchableTerms = new Set([
+    ...(fileRecord.faces || []).map((face) => normalizeName(face.tag)),
+    ...(fileRecord.albums || []).map((album) => normalizeName(album.name)),
+    ...(fileRecord.tags || []).map((tag) => normalizeName(tag.name)),
+  ].filter(Boolean));
+  return terms.every((term) => searchableTerms.has(term));
+}
+
+function matchesSelectedAlbum(fileRecord) {
+  if (state.currentView.type !== "album") return true;
+  return (fileRecord.albums || []).some((album) => album.id === state.currentView.albumId);
 }
 
 function matchesMediaFilter(fileRecord) {
@@ -915,6 +997,7 @@ function renderPeople() {
 
   els.peopleList.replaceChildren();
   renderPersonSuggestions([...counts.keys()]);
+  renderCollections();
   if (!counts.size) {
     const empty = document.createElement("div");
     empty.className = "empty";
@@ -937,6 +1020,179 @@ function renderPeople() {
       });
       els.peopleList.append(button);
     });
+}
+
+function renderCollections() {
+  renderCollectionButtons(els.albumList, state.albums, "No albums yet.", (album) => {
+    state.currentView = {
+      type: "album",
+      albumId: album.id,
+      title: `Album: ${album.name}`,
+      hint: `${album.photoCount} saved file${album.photoCount === 1 ? "" : "s"}.`,
+      terms: [],
+    };
+    applyGalleryFilters();
+  });
+  renderCollectionButtons(els.photoTagList, state.photoTags, "No photo tags yet.", (tag) => {
+    els.searchInput.value = tag.name;
+    search();
+  });
+}
+
+function renderCollectionButtons(container, items, emptyText, onClick) {
+  container.replaceChildren();
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = emptyText;
+    container.append(empty);
+    return;
+  }
+
+  for (const item of items) {
+    const button = document.createElement("button");
+    button.className = "person-button";
+    button.innerHTML = `<strong></strong><span></span>`;
+    button.querySelector("strong").textContent = item.name;
+    button.querySelector("span").textContent = item.photoCount;
+    button.addEventListener("click", () => onClick(item));
+    container.append(button);
+  }
+}
+
+async function createAlbum() {
+  const name = els.albumNameInput.value.trim();
+  if (!name) return;
+  const activityId = startActivity(`Create album ${name}`);
+  try {
+    setBusy(true, "Creating album...");
+    const payload = await postLibraryMutation("/api/albums", { name });
+    syncLibraryPayload(payload);
+    els.albumNameInput.value = "";
+    renderCurrentView({ preserveScroll: true });
+    setProgress(`Album "${name}" is ready.`, 100);
+    finishActivity(activityId, "done", name);
+  } catch (error) {
+    setProgress(error.message, 0);
+    finishActivity(activityId, "failed", error.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function addPhotoToAlbum(fileRecord, select) {
+  const albumId = Number(select.value);
+  if (!albumId) return;
+  const album = state.albums.find((candidate) => candidate.id === albumId);
+  const activityId = startActivity(`Add to album ${album?.name || ""}`, fileRecord.name);
+  select.disabled = true;
+  try {
+    setBusy(true, "Adding photo to album...");
+    const payload = await postLibraryMutation("/api/albums/photos", { albumId, fileId: fileRecord.id });
+    syncLibraryPayload(payload);
+    renderCurrentView({ preserveScroll: true });
+    setProgress(`Added ${fileRecord.name} to ${album?.name || "album"}.`, 100);
+    finishActivity(activityId, "done", fileRecord.name);
+  } catch (error) {
+    setProgress(error.message, 0);
+    finishActivity(activityId, "failed", error.message);
+  } finally {
+    select.disabled = false;
+    setBusy(false);
+  }
+}
+
+async function removePhotoFromAlbum(fileRecord, albumId, button) {
+  const album = state.albums.find((candidate) => candidate.id === albumId);
+  const activityId = startActivity(`Remove from album ${album?.name || ""}`, fileRecord.name);
+  button.disabled = true;
+  try {
+    setBusy(true, "Removing photo from album...");
+    const payload = await deleteLibraryMutation("/api/albums/photos", { albumId, fileId: fileRecord.id });
+    syncLibraryPayload(payload);
+    renderCurrentView({ preserveScroll: true });
+    setProgress(`Removed ${fileRecord.name} from ${album?.name || "album"}.`, 100);
+    finishActivity(activityId, "done", fileRecord.name);
+  } catch (error) {
+    setProgress(error.message, 0);
+    finishActivity(activityId, "failed", error.message);
+  } finally {
+    button.disabled = false;
+    setBusy(false);
+  }
+}
+
+async function addCustomPhotoTag(fileRecord, input, button) {
+  const tag = input.value.trim();
+  if (!tag) return;
+  const activityId = startActivity(`Add photo tag ${tag}`, fileRecord.name);
+  button.disabled = true;
+  try {
+    setBusy(true, "Adding photo tag...");
+    const payload = await postLibraryMutation("/api/photos/tags", { fileId: fileRecord.id, tag });
+    syncLibraryPayload(payload);
+    input.value = "";
+    renderCurrentView({ preserveScroll: true });
+    setProgress(`Tagged ${fileRecord.name} with "${tag}".`, 100);
+    finishActivity(activityId, "done", fileRecord.name);
+  } catch (error) {
+    setProgress(error.message, 0);
+    finishActivity(activityId, "failed", error.message);
+  } finally {
+    button.disabled = false;
+    setBusy(false);
+  }
+}
+
+async function removeCustomPhotoTag(fileRecord, tagId, tagName, button) {
+  const activityId = startActivity(`Remove photo tag ${tagName}`, fileRecord.name);
+  button.disabled = true;
+  try {
+    setBusy(true, "Removing photo tag...");
+    const payload = await deleteLibraryMutation("/api/photos/tags", { fileId: fileRecord.id, tagId });
+    syncLibraryPayload(payload);
+    renderCurrentView({ preserveScroll: true });
+    setProgress(`Removed "${tagName}" from ${fileRecord.name}.`, 100);
+    finishActivity(activityId, "done", fileRecord.name);
+  } catch (error) {
+    setProgress(error.message, 0);
+    finishActivity(activityId, "failed", error.message);
+  } finally {
+    button.disabled = false;
+    setBusy(false);
+  }
+}
+
+async function postLibraryMutation(path, body) {
+  return libraryMutation(path, "POST", body);
+}
+
+async function deleteLibraryMutation(path, body) {
+  return libraryMutation(path, "DELETE", body);
+}
+
+async function libraryMutation(path, method, body) {
+  const response = await fetch(path, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json();
+  if (!payload.ok) throw new Error(payload.error || "Could not update library.");
+  return payload;
+}
+
+function syncLibraryPayload(payload) {
+  if (payload.files) {
+    state.files.clear();
+    for (const record of payload.files) {
+      state.files.set(record.id, record);
+    }
+  }
+  if (payload.albums) state.albums = payload.albums;
+  if (payload.tags) state.photoTags = payload.tags;
+  populateYearFilter();
+  updateStats();
 }
 
 function renderPersonSuggestions(names) {
@@ -1208,6 +1464,8 @@ async function clearIndex() {
       for (const url of state.objectUrls.values()) URL.revokeObjectURL(url);
       state.objectUrls.clear();
       state.files.clear();
+      state.albums = [];
+      state.photoTags = [];
       els.folderLabel.textContent = "No folder selected";
       setProgress("Index cleared.", 0);
       showAll();

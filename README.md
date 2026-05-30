@@ -77,9 +77,11 @@ Enter a local folder path in the UI and choose whether to scan photos, videos, o
 Alex
 Alex, Jordan
 Mary Smith
+Malaysia Trip
+Aman's first birthday
 ```
 
-Multiple names use comma-separated AND matching, so `Alex, Jordan` returns files where both names appear.
+Search terms can match people, albums, or descriptive photo tags. Multiple terms use comma-separated AND matching, so `Alex, Malaysia Trip` returns files where both match.
 
 Metadata API examples:
 
@@ -87,6 +89,8 @@ Metadata API examples:
 /api/search?year=2022
 /api/search?city=Toronto
 /api/search?year=2022&city=Toronto
+/api/search?album=Malaysia%20Trip
+/api/search?tag=Aman%27s%20first%20birthday
 ```
 
 Year queries use `photo_metadata.taken_at`. City queries use `photo_places.city`, so GPS-only photos need a future reverse-geocoding enrichment step before natural place searches like `Toronto` become reliable.
@@ -159,6 +163,8 @@ Useful collection variables:
 - `scanMode`: `photos`, `videos`, or `both`
 - `fileId`, `faceId`, `mediaPath`: can be populated by running `GET /api/files` after a scan
 - `tagName`: sample person tag for `POST /api/tag`
+- `albumId`, `albumName`: sample album values
+- `photoTagId`, `photoTagName`: sample descriptive photo-tag values
 
 ## Roadmap
 

@@ -26,6 +26,14 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
             with database.connection() as conn:
                 self.send_json(database.list_files(conn))
             return
+        if parsed.path == "/api/albums":
+            with database.connection() as conn:
+                self.send_json(database.list_albums(conn))
+            return
+        if parsed.path == "/api/photo-tags":
+            with database.connection() as conn:
+                self.send_json(database.list_tags(conn))
+            return
         if parsed.path == "/api/search":
             params = parse_qs(parsed.query)
             with database.connection() as conn:
@@ -35,6 +43,8 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
                             conn,
                             year=single_param(params, "year"),
                             city=single_param(params, "city"),
+                            album=single_param(params, "album"),
+                            tag=single_param(params, "tag"),
                         )
                     )
                 except ValueError as exc:
@@ -60,6 +70,18 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/tag":
             self.handle_tag()
             return
+        if parsed.path == "/api/albums":
+            self.handle_create_album()
+            return
+        if parsed.path == "/api/albums/photos":
+            self.handle_add_photo_to_album()
+            return
+        if parsed.path == "/api/photo-tags":
+            self.handle_create_photo_tag()
+            return
+        if parsed.path == "/api/photos/tags":
+            self.handle_add_photo_tag()
+            return
         if parsed.path == "/api/ignore-face":
             self.handle_ignore_face()
             return
@@ -71,6 +93,16 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
             return
         if parsed.path == "/api/clear":
             self.handle_clear()
+            return
+        self.send_error(404)
+
+    def do_DELETE(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/albums/photos":
+            self.handle_remove_photo_from_album()
+            return
+        if parsed.path == "/api/photos/tags":
+            self.handle_remove_photo_tag()
             return
         self.send_error(404)
 
@@ -94,6 +126,46 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
         )
         status = result.pop("status", 200)
         self.send_json(result, status=status)
+
+    def handle_create_album(self) -> None:
+        payload = self.read_json()
+        self.run_mutation(lambda conn: database.create_album(conn, payload.get("name", ""), payload.get("description", "")))
+
+    def handle_add_photo_to_album(self) -> None:
+        payload = self.read_json()
+        self.run_mutation(lambda conn: database.add_photo_to_album(conn, int(payload["albumId"]), payload["fileId"]))
+
+    def handle_remove_photo_from_album(self) -> None:
+        payload = self.read_json()
+        self.run_mutation(lambda conn: database.remove_photo_from_album(conn, int(payload["albumId"]), payload["fileId"]))
+
+    def handle_create_photo_tag(self) -> None:
+        payload = self.read_json()
+        self.run_mutation(lambda conn: database.create_photo_tag(conn, payload.get("name", ""), payload.get("kind", "custom")))
+
+    def handle_add_photo_tag(self) -> None:
+        payload = self.read_json()
+        self.run_mutation(lambda conn: database.add_photo_tag(conn, payload["fileId"], payload.get("tag", "")))
+
+    def handle_remove_photo_tag(self) -> None:
+        payload = self.read_json()
+        self.run_mutation(lambda conn: database.remove_photo_tag(conn, payload["fileId"], int(payload["tagId"])))
+
+    def run_mutation(self, mutation) -> None:
+        try:
+            with database.connection() as conn:
+                with conn:
+                    mutation(conn)
+                self.send_json(
+                    {
+                        "ok": True,
+                        "files": database.list_files(conn),
+                        "albums": database.list_albums(conn),
+                        "tags": database.list_tags(conn),
+                    }
+                )
+        except (KeyError, TypeError, ValueError) as exc:
+            self.send_json({"ok": False, "error": str(exc)}, status=400)
 
     def handle_ignore_face(self) -> None:
         payload = self.read_json()
