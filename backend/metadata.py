@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ from PIL import ExifTags, Image
 
 TAGS = ExifTags.TAGS
 GPS_TAGS = ExifTags.GPSTAGS
+logger = logging.getLogger(__name__)
 
 
 def extract_photo_metadata(path: Path) -> dict:
@@ -27,13 +29,14 @@ def extract_photo_metadata(path: Path) -> dict:
         with Image.open(path) as image:
             raw_exif = image.getexif()
             if not raw_exif:
+                logger.debug("No EXIF metadata path=%s", path)
                 return empty
 
             exif = decode_exif(raw_exif)
             gps = decode_gps(raw_exif.get_ifd(ExifTags.IFD.GPSInfo)) if ExifTags.IFD.GPSInfo in raw_exif else {}
             latitude, longitude = gps_coordinates(gps)
 
-            return {
+            metadata = {
                 "taken_at": parse_taken_at(
                     exif.get("DateTimeOriginal") or exif.get("DateTimeDigitized") or exif.get("DateTime")
                 ),
@@ -45,7 +48,10 @@ def extract_photo_metadata(path: Path) -> dict:
                 "orientation": int(exif["Orientation"]) if exif.get("Orientation") else None,
                 "exif_json": json.dumps(serializable_exif(exif, gps)),
             }
+            logger.debug("Extracted metadata path=%s taken_at=%s has_gps=%s", path, metadata["taken_at"], latitude is not None)
+            return metadata
     except Exception:
+        logger.debug("Metadata extraction failed path=%s", path, exc_info=True)
         return empty
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from pathlib import Path
 
 from .config import (
@@ -18,15 +19,18 @@ except ModuleNotFoundError:
     cv2 = None
 
 SCENE_DIFFERENCE_THRESHOLD = 7.5
+logger = logging.getLogger(__name__)
 
 
 def analyze_video(path: Path) -> dict:
     if cv2 is None:
         raise RuntimeError("OpenCV is missing. Install `opencv-python`.")
 
+    logger.info("Analyzing video path=%s", path)
     warnings = []
     capture = cv2.VideoCapture(str(path))
     if not capture.isOpened():
+        logger.warning("Video could not be opened path=%s", path)
         return video_failure(f"{path.name}: video could not be opened; codec may be unsupported.")
 
     fps = capture.get(cv2.CAP_PROP_FPS) or 0.0
@@ -37,6 +41,7 @@ def analyze_video(path: Path) -> dict:
     if fps <= 0:
         fps = 30.0
         warnings.append(f"{path.name}: FPS metadata missing; sampled with 30fps fallback.")
+        logger.warning("Video FPS missing path=%s using_fps=%s", path, fps)
 
     faces = []
     previous_signature = None
@@ -78,6 +83,16 @@ def analyze_video(path: Path) -> dict:
 
     if sampled and not decoded:
         warnings.append(f"{path.name}: video opened but no frames could be decoded.")
+        logger.warning("Video opened but no frames decoded path=%s sampled=%s", path, sampled)
+
+    logger.info(
+        "Video analyzed path=%s sampled=%s decoded=%s faces=%s duration=%s",
+        path,
+        sampled,
+        decoded,
+        len(faces),
+        duration,
+    )
 
     return {
         "width": width,

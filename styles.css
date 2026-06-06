@@ -191,7 +191,8 @@ aside,
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-.scan-label {
+.scan-label,
+.scan-album-label {
   display: grid;
   gap: 4px;
 }
@@ -199,6 +200,10 @@ aside,
 .scan-label select {
   width: 128px;
   background: #fff;
+}
+
+.scan-album-label input {
+  width: 220px;
 }
 
 .stats-grid {

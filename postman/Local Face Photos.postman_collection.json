@@ -178,7 +178,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"path\": \"{{scanPath}}\",\n  \"scanMode\": \"{{scanMode}}\"\n}"
+              "raw": "{\n  \"path\": \"{{scanPath}}\",\n  \"scanMode\": \"{{scanMode}}\",\n  \"albumName\": \"{{albumName}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/scan",
@@ -190,7 +190,7 @@
                 "scan"
               ]
             },
-            "description": "Scans a local folder. `scanMode` supports `photos`, `videos`, or `both`. Large libraries and videos can take a while."
+            "description": "Scans a local folder. `scanMode` supports `photos`, `videos`, or `both`. Optional `albumName` adds every indexed file from this scan to an album. Large libraries and videos can take a while."
           },
           "event": [
             {

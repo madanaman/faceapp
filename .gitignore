@@ -7,6 +7,7 @@ __pycache__/
 face_index.sqlite3
 face_index.sqlite3-shm
 face_index.sqlite3-wal
+logs/
 .thumbnails/
 .venv
 .idea

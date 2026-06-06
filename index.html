@@ -34,6 +34,10 @@
               <option value="both">Both</option>
             </select>
           </label>
+          <label class="scan-album-label" for="scanAlbumInput">
+            Album
+            <input id="scanAlbumInput" type="text" placeholder="Optional album" list="albumSuggestions">
+          </label>
           <button id="scanPathBtn" class="primary">Scan Path</button>
         </div>
         <div class="search-row">
@@ -230,6 +234,7 @@
     </template>
 
     <datalist id="personSuggestions"></datalist>
+    <datalist id="albumSuggestions"></datalist>
 
     <script src="./app.js" type="module"></script>
   </body>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import mimetypes
 from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
@@ -11,6 +12,8 @@ from .config import ROOT
 from .detector import health_payload
 from .scanner import rescan_photo, scan_folder
 from .tagging import tag_face
+
+logger = logging.getLogger(__name__)
 
 
 class LocalFaceHandler(SimpleHTTPRequestHandler):
@@ -108,17 +111,32 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
 
     def handle_scan(self) -> None:
         payload = self.read_json()
+        logger.info(
+            "Scan request path=%s mode=%s album=%s",
+            payload.get("path", ""),
+            payload.get("scanMode", "photos"),
+            payload.get("albumName", ""),
+        )
         try:
             result = scan_folder(
                 Path(payload.get("path", "")).expanduser(),
                 scan_mode=payload.get("scanMode", "photos"),
+                album_name=payload.get("albumName", ""),
+            )
+            logger.info(
+                "Scan completed files=%s auto_tagged=%s warnings=%s",
+                len(result.get("files", [])),
+                result.get("autoTagged", 0),
+                len(result.get("warnings", [])),
             )
             self.send_json({"ok": True, **result})
         except Exception as exc:
+            logger.exception("Scan failed")
             self.send_json({"ok": False, "error": str(exc)}, status=400)
 
     def handle_tag(self) -> None:
         payload = self.read_json()
+        logger.info("Tag request file_id=%s face_id=%s tag=%s", payload.get("fileId"), payload.get("faceId"), payload.get("tag", ""))
         result = tag_face(
             file_id=payload["fileId"],
             face_id=payload["faceId"],
@@ -165,10 +183,12 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
                     }
                 )
         except (KeyError, TypeError, ValueError) as exc:
+            logger.warning("Mutation failed: %s", exc)
             self.send_json({"ok": False, "error": str(exc)}, status=400)
 
     def handle_ignore_face(self) -> None:
         payload = self.read_json()
+        logger.info("Ignore face request file_id=%s face_id=%s", payload.get("fileId"), payload.get("faceId"))
         with database.connection() as conn:
             with conn:
                 removed = database.ignore_face(conn, payload["fileId"], payload["faceId"])
@@ -179,13 +199,22 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
 
     def handle_rescan_photo(self, reset_ignored: bool) -> None:
         payload = self.read_json()
+        logger.info("Rescan request file_id=%s reset_ignored=%s", payload.get("fileId"), reset_ignored)
         try:
             result = rescan_photo(payload["fileId"], reset_ignored=reset_ignored)
+            logger.info(
+                "Rescan completed file_id=%s auto_tagged=%s warnings=%s",
+                payload.get("fileId"),
+                result.get("autoTagged", 0),
+                len(result.get("warnings", [])),
+            )
             self.send_json({"ok": True, **result})
         except Exception as exc:
+            logger.exception("Rescan failed")
             self.send_json({"ok": False, "error": str(exc)}, status=400)
 
     def handle_clear(self) -> None:
+        logger.warning("Clear index request received")
         with database.connection() as conn:
             with conn:
                 database.clear_files(conn)
@@ -216,6 +245,9 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
         with path.open("rb") as handle:
             while chunk := handle.read(1024 * 1024):
                 self.wfile.write(chunk)
+
+    def log_message(self, format: str, *args) -> None:
+        logger.info("%s - %s", self.address_string(), format % args)
 
 
 def single_param(params: dict, key: str) -> str | None:

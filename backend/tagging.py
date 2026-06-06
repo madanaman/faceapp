@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from . import database
 from .config import match_threshold
+
+logger = logging.getLogger(__name__)
 
 
 def embedding_similarity(a: list[float], b: list[float]) -> float:
@@ -23,6 +26,8 @@ def propagate_tag(conn, target_embedding: list[float], tag: str) -> int:
         if embedding_similarity(target_embedding, embedding) >= match_threshold():
             database.set_face_tag(conn, row["id"], tag, source="auto_propagated")
             changed += 1
+    if changed:
+        logger.info("Propagated tag=%s faces=%s", tag, changed)
     return changed
 
 
@@ -51,6 +56,8 @@ def apply_known_tags(conn, faces: list[dict]) -> int:
             face["tag"] = tag
             face["tagSource"] = "auto_propagated"
             changed += 1
+    if changed:
+        logger.info("Applied known tags faces=%s", changed)
     return changed
 
 
@@ -64,4 +71,5 @@ def tag_face(file_id: str, face_id: str, tag: str) -> dict:
             target_embedding = database.face_embedding(conn, face_id)
             database.set_face_tag(conn, face_id, clean_tag, source="manual")
             propagated = propagate_tag(conn, target_embedding, clean_tag)
+        logger.info("Tagged face file_id=%s face_id=%s tag=%s propagated=%s", file_id, face_id, clean_tag, propagated)
         return {"ok": True, "propagated": propagated, "files": database.list_files(conn)}

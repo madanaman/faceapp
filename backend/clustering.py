@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import math
 from uuid import uuid4
 
 from .config import video_cluster_threshold
 from .tagging import embedding_similarity
+
+logger = logging.getLogger(__name__)
 
 
 def cluster_faces(faces: list[dict], threshold: float | None = None) -> list[dict]:
@@ -36,7 +39,9 @@ def cluster_faces(faces: list[dict], threshold: float | None = None) -> list[dic
             }
         )
 
-    return merge_similar_clusters(clusters, threshold)
+    merged = merge_similar_clusters(clusters, threshold)
+    logger.debug("Clustered faces faces=%s clusters=%s threshold=%s", len(faces), len(merged), threshold)
+    return merged
 
 
 def merge_similar_clusters(clusters: list[dict], threshold: float) -> list[dict]:
@@ -75,6 +80,8 @@ def merge_clusters_by_tag(clusters: list[dict]) -> list[dict]:
 
     for cluster in merged_clusters:
         finalize_cluster(cluster)
+    if len(merged_clusters) != len(clusters):
+        logger.info("Merged tagged clusters before=%s after=%s", len(clusters), len(merged_clusters))
     return merged_clusters
 
 
