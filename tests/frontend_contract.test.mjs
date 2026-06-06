@@ -70,13 +70,17 @@ test("gallery date filters and per-photo rescan controls stay wired", () => {
   assert.match(appJs, /function rescanPhoto\(/);
 });
 
-test("scan controls let the user choose photos, videos, or both", () => {
+test("scan controls let the user choose photos, videos, or both and bulk-assign an album", () => {
   assert.match(html, /id="scanMode"/);
+  assert.match(html, /id="scanAlbumInput"/);
+  assert.match(html, /id="albumSuggestions"/);
   assert.match(html, /value="photos"/);
   assert.match(html, /value="videos"/);
   assert.match(html, /value="both"/);
   assert.match(appJs, /scanMode: document\.querySelector\("#scanMode"\)/);
-  assert.match(appJs, /body: JSON\.stringify\(\{ path, scanMode \}\)/);
+  assert.match(appJs, /scanAlbumInput: document\.querySelector\("#scanAlbumInput"\)/);
+  assert.match(appJs, /body: JSON\.stringify\(\{ path, scanMode, albumName \}\)/);
+  assert.match(appJs, /function renderAlbumSuggestions\(\)/);
 });
 
 test("video records can render in the gallery and lightbox", () => {

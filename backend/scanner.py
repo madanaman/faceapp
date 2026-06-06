@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import mimetypes
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from .video import analyze_video
 
 MAY_REQUIRE_EXTRA_DECODER = {".heic", ".heif"}
 SCAN_MODES = {"photos", "videos", "both"}
+logger = logging.getLogger(__name__)
 
 
 def file_signature(path: Path) -> str:
@@ -20,7 +22,7 @@ def file_signature(path: Path) -> str:
     return f"{path.name}:{stat.st_size}:{int(stat.st_mtime)}"
 
 
-def scan_folder(folder: Path, scan_mode: str = "photos") -> dict:
+def scan_folder(folder: Path, scan_mode: str = "photos", album_name: str = "") -> dict:
     if not folder.exists() or not folder.is_dir():
         raise ValueError("Folder does not exist or is not a directory.")
     if scan_mode not in SCAN_MODES:
@@ -29,11 +31,20 @@ def scan_folder(folder: Path, scan_mode: str = "photos") -> dict:
     records = []
     auto_tagged = 0
     warnings = []
+    clean_album_name = album_name.strip()
+    logger.info("Scanning folder=%s mode=%s album=%s", folder, scan_mode, clean_album_name)
 
     with database.connection() as conn:
+        album = None
+        if clean_album_name:
+            with conn:
+                album = database.create_album(conn, clean_album_name)
+                logger.info("Scan album ready name=%s id=%s", clean_album_name, album["id"])
+
         for path in sorted(folder.rglob("*")):
             if not should_scan_path(path, scan_mode):
                 continue
+            logger.debug("Scanning file path=%s", path)
             if path.suffix.lower() in MAY_REQUIRE_EXTRA_DECODER:
                 warnings.append(f"{path.name}: HEIC/HEIF support depends on local OpenCV/Pillow codecs.")
 
@@ -42,16 +53,22 @@ def scan_folder(folder: Path, scan_mode: str = "photos") -> dict:
             with conn:
                 existing = database.find_current_file(conn, file_id, signature)
                 if existing:
+                    logger.debug("Using existing indexed file path=%s", path)
                     record = database.photo_to_record(conn, existing)
                     tagged_count = apply_known_tags(conn, record["faces"])
                     if tagged_count:
                         auto_tagged += tagged_count
                         persist_face_tags(conn, record["faces"])
+                        logger.info("Auto-tagged existing file path=%s faces=%s", path, tagged_count)
                         record = database.photo_to_record(conn, existing)
                     if database.metadata_needs_refresh(conn, file_id):
                         metadata = extract_photo_metadata(path) if is_image(path) else {}
                         database.save_metadata(conn, file_id, metadata)
                         database.save_place(conn, file_id, gps_place(metadata))
+                        record = database.photo_to_record(conn, existing)
+                    if album:
+                        database.add_photo_to_album(conn, album["id"], file_id)
+                        logger.debug("Added existing file to album path=%s album=%s", path, album["name"])
                         record = database.photo_to_record(conn, existing)
                     records.append(record)
                     continue
@@ -60,6 +77,7 @@ def scan_folder(folder: Path, scan_mode: str = "photos") -> dict:
                 warnings.extend(analysis.get("warnings", []))
                 if not analysis["width"] or not analysis["height"]:
                     warnings.append(f"{path.name}: skipped because it could not be decoded.")
+                    logger.warning("Skipped undecodable file path=%s", path)
                     continue
 
                 analysis["faces"] = database.filter_ignored_faces(conn, file_id, analysis["faces"])
@@ -70,6 +88,13 @@ def scan_folder(folder: Path, scan_mode: str = "photos") -> dict:
                 auto_tagged += apply_known_tags(conn, analysis["faces"])
                 propagate_cluster_tags(analysis["faces"])
                 analysis["clusters"] = merge_clusters_by_tag(analysis["clusters"]) if is_video(path) else []
+                logger.info(
+                    "Analyzed file path=%s faces=%s clusters=%s auto_tagged_total=%s",
+                    path,
+                    len(analysis["faces"]),
+                    len(analysis.get("clusters", [])),
+                    auto_tagged,
+                )
 
                 record = {
                     "id": file_id,
@@ -86,9 +111,26 @@ def scan_folder(folder: Path, scan_mode: str = "photos") -> dict:
                     "place": gps_place(metadata),
                 }
                 database.save_file(conn, record)
+                if album:
+                    database.add_photo_to_album(conn, album["id"], file_id)
+                    logger.debug("Added scanned file to album path=%s album=%s", path, album["name"])
+                    record = database.photo_to_record(conn, database.find_file(conn, file_id))
                 records.append(record)
 
-    return {"files": records, "autoTagged": auto_tagged, "warnings": warnings}
+        logger.info(
+            "Scan finished folder=%s files=%s auto_tagged=%s warnings=%s",
+            folder,
+            len(records),
+            auto_tagged,
+            len(warnings),
+        )
+        return {
+            "files": records,
+            "autoTagged": auto_tagged,
+            "warnings": warnings,
+            "albums": database.list_albums(conn),
+            "tags": database.list_tags(conn),
+        }
 
 
 def rescan_photo(file_id: str, reset_ignored: bool = False) -> dict:
@@ -99,6 +141,7 @@ def rescan_photo(file_id: str, reset_ignored: bool = False) -> dict:
     warnings = []
     auto_tagged = 0
     signature = file_signature(path)
+    logger.info("Rescanning file=%s reset_ignored=%s", file_id, reset_ignored)
 
     with database.connection() as conn:
         if not database.find_file(conn, file_id):
@@ -107,10 +150,12 @@ def rescan_photo(file_id: str, reset_ignored: bool = False) -> dict:
         with conn:
             if reset_ignored:
                 database.clear_ignored_faces(conn, file_id)
+                logger.info("Cleared ignored faces file=%s", file_id)
 
             analysis = analyze_path(path)
             warnings.extend(analysis.get("warnings", []))
             if not analysis["width"] or not analysis["height"]:
+                logger.warning("Rescan failed decode file=%s", file_id)
                 raise ValueError("File could not be decoded.")
 
             analysis["faces"] = database.filter_ignored_faces(conn, file_id, analysis["faces"])
@@ -136,6 +181,13 @@ def rescan_photo(file_id: str, reset_ignored: bool = False) -> dict:
                 "place": gps_place(metadata),
             }
             database.save_file(conn, record)
+            logger.info(
+                "Rescan analyzed file=%s faces=%s clusters=%s auto_tagged=%s",
+                file_id,
+                len(analysis["faces"]),
+                len(analysis.get("clusters", [])),
+                auto_tagged,
+            )
 
         return {"files": database.list_files(conn), "autoTagged": auto_tagged, "warnings": warnings}
 

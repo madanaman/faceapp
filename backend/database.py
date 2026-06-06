@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import json
+import logging
 import sqlite3
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -9,6 +10,7 @@ from uuid import uuid4
 from .config import DB_PATH, face_box_iou_threshold, face_reconcile_threshold, match_threshold
 
 SCHEMA_VERSION = 6
+logger = logging.getLogger(__name__)
 
 
 def connect() -> sqlite3.Connection:
@@ -166,6 +168,7 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
 
 def run_migrations(conn: sqlite3.Connection) -> None:
     version = conn.execute("pragma user_version").fetchone()[0]
+    logger.debug("Running migrations current_version=%s target_version=%s", version, SCHEMA_VERSION)
     if version < 1:
         migrate_legacy_files(conn)
     if version < 2:
@@ -344,7 +347,9 @@ def create_album(conn: sqlite3.Connection, name: str, description: str = "") -> 
         (clean_name, description.strip(), now, now),
     )
     row = conn.execute("select id from albums where name = ? collate nocase", (clean_name,)).fetchone()
-    return next(album for album in list_albums(conn) if album["id"] == row["id"])
+    album = next(album for album in list_albums(conn) if album["id"] == row["id"])
+    logger.info("Album ready id=%s name=%s", album["id"], album["name"])
+    return album
 
 
 def list_photo_albums(conn: sqlite3.Connection, photo_id: str) -> list[dict]:
@@ -372,10 +377,12 @@ def add_photo_to_album(conn: sqlite3.Connection, album_id: int, photo_id: str) -
         (album_id, photo_id, now),
     )
     conn.execute("update albums set updated_at = ? where id = ?", (now, album_id))
+    logger.info("Photo added to album album_id=%s photo_id=%s", album_id, photo_id)
 
 
 def remove_photo_from_album(conn: sqlite3.Connection, album_id: int, photo_id: str) -> None:
     conn.execute("delete from album_photos where album_id = ? and photo_id = ?", (album_id, photo_id))
+    logger.info("Photo removed from album album_id=%s photo_id=%s", album_id, photo_id)
 
 
 def list_tags(conn: sqlite3.Connection) -> list[dict]:
@@ -410,7 +417,9 @@ def create_photo_tag(conn: sqlite3.Connection, name: str, kind: str = "custom") 
         (clean_name, clean_kind, now),
     )
     row = conn.execute("select id from photo_tags where name = ? collate nocase", (clean_name,)).fetchone()
-    return next(tag for tag in list_tags(conn) if tag["id"] == row["id"])
+    tag = next(tag for tag in list_tags(conn) if tag["id"] == row["id"])
+    logger.info("Photo tag ready id=%s name=%s", tag["id"], tag["name"])
+    return tag
 
 
 def list_photo_tags(conn: sqlite3.Connection, photo_id: str) -> list[dict]:
@@ -435,10 +444,12 @@ def add_photo_tag(conn: sqlite3.Connection, photo_id: str, name: str, kind: str 
         "insert or ignore into photo_tag_links (photo_id, tag_id, created_at) values (?, ?, ?)",
         (photo_id, tag["id"], datetime.now(UTC).isoformat(timespec="seconds")),
     )
+    logger.info("Photo tag added photo_id=%s tag_id=%s tag=%s", photo_id, tag["id"], tag["name"])
 
 
 def remove_photo_tag(conn: sqlite3.Connection, photo_id: str, tag_id: int) -> None:
     conn.execute("delete from photo_tag_links where photo_id = ? and tag_id = ?", (photo_id, tag_id))
+    logger.info("Photo tag removed photo_id=%s tag_id=%s", photo_id, tag_id)
 
 
 def photo_to_record(conn: sqlite3.Connection, photo_row: sqlite3.Row) -> dict:
@@ -578,6 +589,7 @@ def save_file(conn: sqlite3.Connection, record: dict) -> None:
     replace_faces(conn, record["id"], faces, source="manual", clusters=record.get("clusters", []))
     save_metadata(conn, record["id"], record.get("metadata", {}))
     save_place(conn, record["id"], record.get("place", {}))
+    logger.debug("Saved file id=%s faces=%s clusters=%s", record["id"], len(faces), len(record.get("clusters", [])))
 
 
 def replace_faces(
@@ -758,11 +770,13 @@ def ignore_face(conn: sqlite3.Connection, file_id: str, face_id: str) -> bool:
     conn.execute(f"delete from faces where id in ({placeholders})", tuple(face_ids))
     if row["cluster_id"]:
         conn.execute("delete from face_clusters where id = ?", (row["cluster_id"],))
+    logger.info("Ignored face file_id=%s face_id=%s related_faces=%s", file_id, face_id, len(face_ids))
     return True
 
 
 def clear_ignored_faces(conn: sqlite3.Connection, file_id: str) -> None:
     conn.execute("delete from ignored_faces where photo_id = ?", (file_id,))
+    logger.info("Cleared ignored faces file_id=%s", file_id)
 
 
 def reconcile_faces(conn: sqlite3.Connection, photo_id: str, new_faces: list[dict]) -> list[dict]:
@@ -962,6 +976,7 @@ def clear_files(conn: sqlite3.Connection) -> None:
     conn.execute("delete from photos")
     if table_exists(conn, "files"):
         conn.execute("delete from files")
+    logger.warning("Cleared indexed files and annotations")
 
 
 def row_dict(row: sqlite3.Row | None) -> dict:

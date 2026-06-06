@@ -31,6 +31,7 @@ const els = {
   folderLabel: document.querySelector("#folderLabel"),
   pathInput: document.querySelector("#pathInput"),
   scanMode: document.querySelector("#scanMode"),
+  scanAlbumInput: document.querySelector("#scanAlbumInput"),
   scanPathBtn: document.querySelector("#scanPathBtn"),
   searchInput: document.querySelector("#searchInput"),
   searchBtn: document.querySelector("#searchBtn"),
@@ -53,6 +54,7 @@ const els = {
   activityClose: document.querySelector("#activityClose"),
   activityList: document.querySelector("#activityList"),
   personSuggestions: document.querySelector("#personSuggestions"),
+  albumSuggestions: document.querySelector("#albumSuggestions"),
   gallery: document.querySelector("#gallery"),
   galleryTitle: document.querySelector("#galleryTitle"),
   galleryHint: document.querySelector("#galleryHint"),
@@ -213,14 +215,15 @@ async function scanPath() {
 
   const scanMode = els.scanMode.value;
   const modeLabel = els.scanMode.selectedOptions[0]?.textContent.toLowerCase() || "photos";
+  const albumName = els.scanAlbumInput.value.trim();
   const activityId = startActivity(`Scan ${modeLabel}`, displayFolderName(path));
-  setProgress(`Scanning ${modeLabel} with InsightEdge. Large libraries can take a while...`, 8);
+  setProgress(`Scanning ${modeLabel}${albumName ? ` into "${albumName}"` : ""} with InsightEdge. Large libraries can take a while...`, 8);
   els.scanPathBtn.disabled = true;
   try {
     const response = await fetch("/api/scan", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path, scanMode }),
+      body: JSON.stringify({ path, scanMode, albumName }),
     });
     const payload = await response.json();
     if (!payload.ok) throw new Error(payload.error || "Scan failed.");
@@ -228,12 +231,15 @@ async function scanPath() {
     for (const record of payload.files) {
       state.files.set(record.id, record);
     }
+    if (payload.albums) state.albums = payload.albums;
+    if (payload.tags) state.photoTags = payload.tags;
     populateYearFilter();
     els.folderLabel.textContent = displayFolderName(path);
     els.folderLabel.title = path;
     const autoTagged = payload.autoTagged ? ` ${payload.autoTagged} faces auto-tagged.` : "";
     const warningText = payload.warnings?.length ? ` ${payload.warnings.length} files warned/skipped.` : "";
-    setProgress(`Scan complete: ${payload.files.length} files indexed.${autoTagged}${warningText}`, 100);
+    const albumText = albumName ? ` Added to "${albumName}".` : "";
+    setProgress(`Scan complete: ${payload.files.length} files indexed.${autoTagged}${warningText}${albumText}`, 100);
     finishActivity(activityId, "done", `${payload.files.length} files indexed${payload.warnings?.length ? `, ${payload.warnings.length} warnings` : ""}`);
     showAll();
   } catch (error) {
@@ -1023,6 +1029,7 @@ function renderPeople() {
 }
 
 function renderCollections() {
+  renderAlbumSuggestions();
   renderCollectionButtons(els.albumList, state.albums, "No albums yet.", (album) => {
     state.currentView = {
       type: "album",
@@ -1037,6 +1044,16 @@ function renderCollections() {
     els.searchInput.value = tag.name;
     search();
   });
+}
+
+function renderAlbumSuggestions() {
+  els.albumSuggestions.replaceChildren(
+    ...state.albums.map((album) => {
+      const option = document.createElement("option");
+      option.value = album.name;
+      return option;
+    }),
+  );
 }
 
 function renderCollectionButtons(container, items, emptyText, onClick) {

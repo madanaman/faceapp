@@ -69,7 +69,7 @@ Then open:
 http://localhost:8000
 ```
 
-Enter a local folder path in the UI and choose whether to scan photos, videos, or both.
+Enter a local folder path in the UI and choose whether to scan photos, videos, or both. Optionally enter an album name during scanning to add every indexed file from that scan to the album in one step.
 
 ## Search Examples
 
@@ -111,7 +111,11 @@ VIDEO_MAX_FRAMES=300
 VIDEO_MIN_DETECTION_SCORE=0.7
 VIDEO_MIN_FACE_HEIGHT_RATIO=0.04
 VIDEO_CLUSTER_THRESHOLD=0.42
+LOG_LEVEL=INFO
+LOG_RETENTION_DAYS=3
 ```
+
+Backend logs are written to `logs/faceapp.log` with daily rotation. Use `LOG_LEVEL=DEBUG` when you need per-file scan and detection detail.
 
 ## Video Scanning
 

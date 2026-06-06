@@ -8,6 +8,8 @@ DB_PATH = ROOT / "face_index.sqlite3"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".heic", ".heif"}
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".avi", ".webm"}
 THUMBNAIL_DIR = ROOT / ".thumbnails"
+LOG_DIR = ROOT / "logs"
+LOG_FILE = LOG_DIR / "faceapp.log"
 
 ENGINE_NAME = "InsightFace buffalo_l"
 REQUESTED_PROVIDERS = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
@@ -20,6 +22,8 @@ DEFAULT_VIDEO_MAX_FRAMES = 300
 DEFAULT_VIDEO_MIN_DETECTION_SCORE = 0.7
 DEFAULT_VIDEO_MIN_FACE_HEIGHT_RATIO = 0.04
 DEFAULT_VIDEO_CLUSTER_THRESHOLD = 0.42
+DEFAULT_LOG_LEVEL = "INFO"
+DEFAULT_LOG_RETENTION_DAYS = 3
 
 os.environ.setdefault("MPLCONFIGDIR", str(ROOT / ".cache" / "matplotlib"))
 os.environ.setdefault("NO_ALBUMENTATIONS_UPDATE", "1")
@@ -59,3 +63,11 @@ def video_min_face_height_ratio() -> float:
 
 def video_cluster_threshold() -> float:
     return float(os.environ.get("VIDEO_CLUSTER_THRESHOLD", str(DEFAULT_VIDEO_CLUSTER_THRESHOLD)))
+
+
+def log_level() -> str:
+    return os.environ.get("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
+
+
+def log_retention_days() -> int:
+    return int(os.environ.get("LOG_RETENTION_DAYS", str(DEFAULT_LOG_RETENTION_DAYS)))

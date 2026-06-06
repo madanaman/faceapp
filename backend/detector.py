@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from .config import ENGINE_NAME, REQUESTED_PROVIDERS, model_name
 
 FACE_APP = None
+logger = logging.getLogger(__name__)
 
 
 def ensure_detector():
@@ -30,8 +32,10 @@ def ensure_detector():
     if "CPUExecutionProvider" not in providers:
         providers.append("CPUExecutionProvider")
 
+    logger.info("Initializing face detector model=%s providers=%s", model_name(), providers)
     FACE_APP = FaceAnalysis(name=model_name(), providers=providers)
     FACE_APP.prepare(ctx_id=-1, det_size=(640, 640))
+    logger.info("Face detector ready")
     return FACE_APP
 
 
@@ -79,10 +83,13 @@ def detect_faces(path: Path) -> dict:
 
     image = cv2.imread(str(path))
     if image is None:
+        logger.warning("Could not read image path=%s", path)
         return {"width": 0, "height": 0, "faces": []}
 
     height, width = image.shape[:2]
-    return {"width": width, "height": height, "faces": detect_faces_in_image(image)}
+    faces = detect_faces_in_image(image)
+    logger.debug("Detected faces path=%s width=%s height=%s faces=%s", path, width, height, len(faces))
+    return {"width": width, "height": height, "faces": faces}
 
 
 def detect_faces_in_image(image) -> list[dict]:
