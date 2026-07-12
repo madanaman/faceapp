@@ -28,6 +28,9 @@
     "externalBin": [
       "binaries/local-face-backend"
     ],
-    "resources": []
+    "resources": [],
+    "macOS": {
+      "signingIdentity": "-"
+    }
   }
 }
