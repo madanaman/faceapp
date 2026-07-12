@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import logging
 import mimetypes
+import subprocess
+import sys
 from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import database
-from .config import ROOT
+from .config import STATIC_ROOT
 from .detector import health_payload
 from .scanner import rescan_photo, scan_folder
 from .tagging import tag_face
@@ -18,10 +20,13 @@ logger = logging.getLogger(__name__)
 
 class LocalFaceHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=str(ROOT), **kwargs)
+        super().__init__(*args, directory=str(STATIC_ROOT), **kwargs)
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/api/ready":
+            self.send_json({"ok": True})
+            return
         if parsed.path == "/api/health":
             self.send_json(health_payload())
             return
@@ -61,14 +66,25 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
 
     def end_headers(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/"):
+            self.send_header("access-control-allow-origin", "*")
+            self.send_header("access-control-allow-methods", "GET, POST, DELETE, OPTIONS")
+            self.send_header("access-control-allow-headers", "content-type")
         if not parsed.path.startswith("/api/media"):
             self.send_header("cache-control", "no-store")
         super().end_headers()
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(204)
+        self.end_headers()
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/api/scan":
             self.handle_scan()
+            return
+        if parsed.path == "/api/pick-folder":
+            self.handle_pick_folder()
             return
         if parsed.path == "/api/tag":
             self.handle_tag()
@@ -133,6 +149,30 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
         except Exception as exc:
             logger.exception("Scan failed")
             self.send_json({"ok": False, "error": str(exc)}, status=400)
+
+    def handle_pick_folder(self) -> None:
+        if sys.platform != "darwin":
+            self.send_json({"ok": False, "error": "Folder picker is only wired for macOS desktop builds."}, status=501)
+            return
+        try:
+            result = subprocess.run(
+                [
+                    "osascript",
+                    "-e",
+                    'POSIX path of (choose folder with prompt "Choose a folder to scan")',
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        except Exception as exc:
+            self.send_json({"ok": False, "error": str(exc)}, status=500)
+            return
+        if result.returncode != 0:
+            self.send_json({"ok": True, "path": ""})
+            return
+        self.send_json({"ok": True, "path": result.stdout.strip("\n")})
 
     def handle_tag(self) -> None:
         payload = self.read_json()

@@ -1,0 +1,15 @@
+{
+  "name": "local-face-photos",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "python scripts/check.py",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "python scripts/desktop_build.py",
+    "tauri:build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}
