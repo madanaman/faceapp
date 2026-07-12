@@ -30,7 +30,8 @@
     ],
     "resources": [],
     "macOS": {
-      "signingIdentity": "-"
+      "signingIdentity": "-",
+      "hardenedRuntime": false
     }
   }
 }
