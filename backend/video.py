@@ -13,20 +13,22 @@ from .config import (
 )
 from .detector import detect_faces_in_image
 
-try:
-    import cv2  # type: ignore
-except ModuleNotFoundError:
-    cv2 = None
-
 SCENE_DIFFERENCE_THRESHOLD = 7.5
 logger = logging.getLogger(__name__)
 
 
-def analyze_video(path: Path) -> dict:
-    if cv2 is None:
-        raise RuntimeError("OpenCV is missing. Install `opencv-python`.")
+def get_cv2():
+    try:
+        import cv2  # type: ignore
 
+        return cv2
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("OpenCV is missing. Install `opencv-python`.") from exc
+
+
+def analyze_video(path: Path) -> dict:
     logger.info("Analyzing video path=%s", path)
+    cv2 = get_cv2()
     warnings = []
     capture = cv2.VideoCapture(str(path))
     if not capture.isOpened():
@@ -65,7 +67,7 @@ def analyze_video(path: Path) -> dict:
             continue
         decoded += 1
 
-        signature = frame_signature(frame)
+        signature = frame_signature(cv2, frame)
         if previous_signature is not None and frame_difference(previous_signature, signature) < SCENE_DIFFERENCE_THRESHOLD:
             continue
         previous_signature = signature
@@ -76,7 +78,7 @@ def analyze_video(path: Path) -> dict:
             face["id"] = f"candidate-{frame_index}-{face_index}"
             face["frameIndex"] = frame_index
             face["timestampSeconds"] = timestamp
-            face["thumbnail"] = save_face_thumbnail(path, frame, face)
+            face["thumbnail"] = save_face_thumbnail(cv2, path, frame, face)
             faces.append(face)
 
     capture.release()
@@ -120,7 +122,7 @@ def is_main_video_face(face: dict, min_score: float, min_face_height: float) -> 
     return True
 
 
-def frame_signature(frame) -> object:
+def frame_signature(cv2, frame) -> object:
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     return cv2.resize(gray, (64, 36))
 
@@ -129,7 +131,7 @@ def frame_difference(a, b) -> float:
     return float(abs(a.astype("float32") - b.astype("float32")).mean())
 
 
-def save_face_thumbnail(path: Path, frame, face: dict) -> str:
+def save_face_thumbnail(cv2, path: Path, frame, face: dict) -> str:
     THUMBNAIL_DIR.mkdir(parents=True, exist_ok=True)
     box = face.get("box", {})
     height, width = frame.shape[:2]

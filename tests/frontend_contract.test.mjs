@@ -193,8 +193,8 @@ test("albums and descriptive photo tags are available from the gallery", () => {
   assert.match(html, /class="album-select"/);
   assert.doesNotMatch(html, /class="add-album/);
   assert.match(html, /class="custom-tag-input"/);
-  assert.match(appJs, /fetch\("\/api\/albums"\)/);
-  assert.match(appJs, /fetch\("\/api\/photo-tags"\)/);
+  assert.match(appJs, /fetch\(apiUrl\("\/api\/albums"\)\)/);
+  assert.match(appJs, /fetch\(apiUrl\("\/api\/photo-tags"\)\)/);
   assert.match(appJs, /postLibraryMutation\("\/api\/albums\/photos"/);
   assert.match(appJs, /albumSelect\.addEventListener\("change", \(\) => addPhotoToAlbum\(fileRecord, albumSelect\)\)/);
   assert.match(appJs, /className = "remove-collection-chip"/);
@@ -202,6 +202,14 @@ test("albums and descriptive photo tags are available from the gallery", () => {
   assert.match(appJs, /postLibraryMutation\("\/api\/photos\/tags"/);
   assert.match(appJs, /function removeCustomPhotoTag\(fileRecord, tagId, tagName, button\)/);
   assert.match(appJs, /deleteLibraryMutation\("\/api\/photos\/tags"/);
+});
+
+test("desktop shell keeps Tauri bridge and routes backend calls through dynamic URL", () => {
+  assert.match(appJs, /function desktopInvoke\(\)/);
+  assert.match(appJs, /invoke\("backend_url"\)/);
+  assert.match(appJs, /function apiUrl\(path\)/);
+  assert.match(appJs, /fetch\(apiUrl\("\/api\/health"\)/);
+  assert.match(appJs, /return invoke\("pick_folder"\)/);
 });
 
 test("library search includes people albums and custom photo tags", () => {

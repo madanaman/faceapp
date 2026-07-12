@@ -41,16 +41,11 @@ def ensure_detector():
 
 def dependency_status() -> tuple[bool, str]:
     try:
-        try:
-            __import__("insightedge.app")
-        except ModuleNotFoundError:
-            __import__("insightface.app")
         __import__("onnxruntime")
-        __import__("cv2")
     except ModuleNotFoundError:
         return False, (
-            "InsightEdge/InsightFace dependencies are missing. Install them with "
-            "`python3 -m pip install insightface onnxruntime opencv-python`."
+            "ONNX Runtime is missing. Install dependencies with "
+            "`python3 -m pip install -r requirements.txt`."
         )
     return True, ""
 

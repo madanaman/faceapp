@@ -2,7 +2,7 @@
 
 A local-first photo and video library for finding memories by the people in them. It scans folders on your own computer, detects faces with InsightFace/InsightEdge, lets you tag people, and searches by one or more names.
 
-This is an early open-source build aimed at technical users. It runs as a local web app today; Docker and desktop packaging are planned for later releases.
+This is an early open-source build aimed at technical users. It can run as a local web app, and an experimental Tauri desktop package is available for local testing.
 
 ## Features
 
@@ -54,6 +54,8 @@ Apple Silicon users may prefer a Conda/Miniforge environment for CoreML/ONNX pac
 ```sh
 PYTHON_BIN=/path/to/python make run
 ```
+
+On Windows, use Python 3.11 x64 if possible. Install Microsoft C++ Build Tools if Python packages need to compile native wheels.
 
 ## Run
 
@@ -117,6 +119,46 @@ LOG_RETENTION_DAYS=3
 
 Backend logs are written to `logs/faceapp.log` with daily rotation. Use `LOG_LEVEL=DEBUG` when you need per-file scan and detection detail.
 
+`INSIGHTFACE_PROVIDERS` is optional. By default macOS uses `CoreMLExecutionProvider,CPUExecutionProvider`; Windows and Linux use `CPUExecutionProvider`. For Windows CPU testing you can leave it unset or set:
+
+```sh
+INSIGHTFACE_PROVIDERS=CPUExecutionProvider
+```
+
+## Desktop Packaging
+
+The desktop build uses Tauri for the shell and PyInstaller for the local Python backend sidecar.
+
+Install desktop build dependencies:
+
+```sh
+python -m pip install -r requirements.txt
+python -m pip install -r requirements-desktop.txt
+npm install
+```
+
+Build on macOS/Linux:
+
+```sh
+python scripts/check.py
+python scripts/desktop_build.py
+```
+
+Build on Windows PowerShell:
+
+```powershell
+py -3.11 -m pip install -r requirements.txt
+py -3.11 -m pip install -r requirements-desktop.txt
+npm install
+py -3.11 scripts\check.py
+py -3.11 scripts\desktop_build.py
+```
+
+The Windows build script copies the PyInstaller output to the Tauri sidecar name expected by the current Rust target, for example `src-tauri\binaries\local-face-backend-x86_64-pc-windows-msvc.exe`.
+It also asks Tauri for the platform bundle target automatically: DMG on macOS, NSIS installer on Windows, and AppImage on Linux. Set `TAURI_BUNDLES=app` on macOS if you only want the raw `.app` bundle during development.
+
+Windows ARM VMs are useful for smoke testing app startup, folder picker behavior, and the UI. For public Windows x64 releases, prefer a real Windows x64 machine or GitHub Actions Windows x64 runner.
+
 ## Video Scanning
 
 Video scans sample frames instead of reading every frame. Faces are filtered by InsightFace detection score and minimum face size, clustered by embedding similarity, and represented in the UI by the best face crop.
@@ -155,6 +197,38 @@ make check
 ```
 
 The test suite intentionally avoids requiring a full InsightFace model download in CI. Heavy runtime testing should be done locally with a small private or synthetic media folder.
+
+## Desktop Packaging Preview
+
+The first desktop packaging path uses Tauri for the native shell and PyInstaller for the Python backend sidecar. This is currently a developer preview focused on macOS first.
+
+Install desktop build tooling:
+
+```sh
+python -m pip install -r requirements-desktop.txt
+npm install
+```
+
+Build the backend sidecar for your current platform:
+
+```sh
+make desktop-backend
+```
+
+Run or build the desktop shell:
+
+```sh
+make desktop-dev
+make desktop-build
+```
+
+Packaged builds set `LOCAL_FACE_PACKAGED=1`, which stores generated app data outside the source folder:
+
+- macOS: `~/Library/Application Support/Local Face Photos`
+- Windows: `%APPDATA%\Local Face Photos`
+- Linux: `${XDG_DATA_HOME:-~/.local/share}/local-face-photos`
+
+The generated desktop sidecar is intentionally not committed. Each OS must build its own sidecar binary.
 
 ## API Testing
 
