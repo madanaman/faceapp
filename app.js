@@ -151,7 +151,8 @@ function setupDesktopBridge() {
       els.pathInput.value = path;
       els.folderLabel.textContent = displayFolderName(path);
       els.folderLabel.title = path;
-      addActivity(`Selected folder ${displayFolderName(path)}`);
+      const activityId = startActivity("Selected folder", displayFolderName(path));
+      finishActivity(activityId, "done", path);
     } catch (error) {
       setProgress(error.message || "Could not open folder picker.", 0);
     }
