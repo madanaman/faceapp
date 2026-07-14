@@ -129,9 +129,11 @@ test("activity panel tracks running and recent background actions", () => {
   assert.match(appJs, /function finishActivity\(/);
   assert.match(appJs, /function toggleActivityPanel\(/);
   assert.match(appJs, /startActivity\(`Scan \$\{modeLabel\}`/);
+  assert.match(appJs, /startActivity\("Selected folder", displayFolderName\(path\)\)/);
   assert.match(appJs, /startActivity\(cleanTag \? `Tag \$\{cleanTag\}` : "Clear tag"/);
   assert.match(appJs, /startActivity\("Remove face box"/);
   assert.match(appJs, /startActivity\(resetIgnored \? "Reset ignored and rescan" : "Rescan faces"/);
+  assert.doesNotMatch(appJs, /addActivity/);
 });
 
 test("face list supports scrolling and bulk removal", () => {
