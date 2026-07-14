@@ -10,9 +10,9 @@ This is an early open-source beta for technical users who are comfortable trying
 
 The current public build is available from the GitHub release page:
 
-- [Download Local Face Photos v1.1.0 beta for macOS Apple Silicon](https://github.com/madanaman/faceapp/releases/download/v1.1.0-beta.1/Local.Face.Photos_0.1.0_aarch64.dmg)
-- Release page: [v1.1.0-beta.1](https://github.com/madanaman/faceapp/releases/tag/v1.1.0-beta.1)
-- SHA-256: `e8bae529b740b9e87db12cfacdddbd7d337d98b418ddd72bc90395e1bd2f15e0`
+- [Download the latest macOS Apple Silicon beta](https://github.com/madanaman/faceapp/releases/latest)
+- Current release: [v1.1.0-beta.4](https://github.com/madanaman/faceapp/releases/tag/v1.1.0-beta.4)
+- Current DMG SHA-256: `2a81d9c02dd4e4084e5eeb9fe69de2f2e3e8d631259feb3ad1befeaed5608d45`
 
 Important beta notes:
 
