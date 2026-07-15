@@ -9,7 +9,7 @@ permissions:
 jobs:
   build-intel-macos:
     name: Build Intel macOS DMG
-    runs-on: macos-13
+    runs-on: macos-15-intel
 
     steps:
       - name: Checkout
