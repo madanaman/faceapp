@@ -260,6 +260,18 @@ Useful collection variables:
 - Optional reverse geocoding for city/region search.
 - More polished demo media and onboarding.
 
+## Use of Codex and GPT-5.6
+
+Codex was used as a development collaborator throughout the project: planning the architecture, refactoring the backend, designing the SQLite schema, adding video support, creating tests, packaging the app with Tauri, preparing GitHub releases, and polishing documentation.
+
+GPT-5.6 is planned as the natural language layer for search. Instead of requiring users to manually combine filters, the app can interpret queries like:
+
+- “Show me photos of Aman from 2022”
+- “Find Ironman Malaysia photos with Preeti”
+- “Show videos from December 2022”
+
+The goal is to keep the private photo library local while using OpenAI to translate human search intent into structured local database queries.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
