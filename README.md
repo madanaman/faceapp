@@ -35,6 +35,7 @@ Google Photos and similar services are convenient, but they often push users tow
 - Search by one person, multiple people, albums, or descriptive photo tags.
 - Filter by media type, year, month, date, and sort direction.
 - Add albums during scan, or later per photo/video.
+- Supports a synthetic demo media flow so reviewers can try the app without using personal photos.
 - Hide videos with no visible/taggable faces by default.
 - Ignore/remove noisy face boxes so they stay hidden on future scans.
 - Store the index locally in SQLite.
@@ -60,6 +61,34 @@ Packaged desktop builds store generated app data outside the source folder:
 5. Choose whether to scan **Photos**, **Videos**, or **Both**.
 6. Optionally enter an album name before scanning.
 7. Tag a few detected faces, then search by name, album, or photo tag.
+
+## Try It With Demo Media
+
+If you do not want to scan personal photos right away, use the provided synthetic demo media pack.
+
+The demo pack contains generated photos with recurring fictional people, so you can test the full flow without exposing private family photos.
+
+Suggested flow:
+
+1. Download or open the demo media folder.
+2. Launch Local Face Photos.
+3. Click **Choose Folder** and select the demo media folder.
+4. Set **Scan** to **Both**.
+5. Enter an album name such as `Demo Album`.
+6. Click **Scan Path**.
+7. Tag a few detected faces with names like:
+   - `Aman`
+   - `Preeti`
+   - `Sahil`
+   - `Sofia`
+8. Try searches like:
+   - `Aman`
+   - `Aman, Preeti`
+   - `Demo Album`
+   - `birthday`
+   - `photos from 2022`
+
+The demo media is synthetic and does not contain private family photos.
 
 ## Quick Start: Local Web App
 
