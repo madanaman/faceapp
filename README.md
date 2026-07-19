@@ -64,13 +64,13 @@ Packaged desktop builds store generated app data outside the source folder:
 
 ## Try It With Demo Media
 
-If you do not want to scan personal photos right away, use the provided synthetic demo media pack.
+If you do not want to scan personal photos right away, download the provided [synthetic demo media pack](docs/demo-media/local-face-photos-demo-media.zip).
 
 The demo pack contains generated photos with recurring fictional people, so you can test the full flow without exposing private family photos.
 
 Suggested flow:
 
-1. Download or open the demo media folder.
+1. Download and unzip the demo media pack.
 2. Launch Local Face Photos.
 3. Click **Choose Folder** and select the demo media folder.
 4. Set **Scan** to **Both**.
