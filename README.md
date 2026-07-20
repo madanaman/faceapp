@@ -13,8 +13,8 @@ This is an early open-source beta for technical users who are comfortable trying
 The current public build is available from the GitHub release page:
 
 - [Download the latest tested macOS Apple Silicon beta](https://github.com/madanaman/faceapp/releases/latest)
-- Current release: [v1.1.0-beta.4](https://github.com/madanaman/faceapp/releases/tag/v1.1.0-beta.4)
-- Current Apple Silicon DMG SHA-256: `2a81d9c02dd4e4084e5eeb9fe69de2f2e3e8d631259feb3ad1befeaed5608d45`
+- Current release: [v1.2.0-beta.1](https://github.com/madanaman/faceapp/releases/tag/v1.2.0-beta.1)
+- Current Apple Silicon DMG SHA-256: `c99af47122359d3ad82bbb59a1d23301c9b2319a5f4b2ec1c81311d09761d1b5`
 - Experimental Intel Mac x64 builds can be generated from GitHub Actions, but they are community-test candidates until validated on real Intel hardware.
 
 Important beta notes:
