@@ -1,8 +1,8 @@
 # Local Face Photos
 
-A private, local-first photo and video library for finding memories by the people, albums, tags, and dates in them.
+A private, local-first photo and video library for finding memories by the people, albums, tags, dates, and simple natural-language queries.
 
-Local Face Photos scans folders on your own computer, detects faces with InsightFace, lets you tag people, and searches your library without uploading private photos to a cloud service.
+Local Face Photos scans folders on your own computer, detects faces with InsightFace, lets you tag people, and searches your library without uploading private photos to a cloud service. Searches like `show me photos of Aman from 2022` are interpreted locally against your own people, albums, and photo tags.
 
 This is an early open-source beta for technical users who are comfortable trying unsigned desktop builds or running a local Python app.
 
@@ -45,7 +45,7 @@ If you do not want to scan personal photos right away, download the provided [sy
 5. Enter an album name such as `Demo Album`.
 6. Click **Scan Path**.
 7. Tag a few detected faces with names like `Aman`, `Preeti`, `Sahil`, and `Sofia`.
-8. Try searches like `Aman`, `Aman, Preeti`, `Demo Album`, `birthday`, or `photos from 2022`.
+8. Try searches like `show me videos with Aman from December 2022`, `photos from 2022`, `Aman`, `Aman, Preeti`, `Demo Album`, or `birthday`.
 
 The demo media is synthetic and does not contain private family photos.
 
@@ -57,7 +57,7 @@ The demo media is synthetic and does not contain private family photos.
 4. Click **Choose Folder** and select a folder with photos or videos.
 5. Choose whether to scan **Photos**, **Videos**, or **Both**.
 6. Optionally enter an album name before scanning.
-7. Tag a few detected faces, then search by name, album, date, or photo tag.
+7. Tag a few detected faces, then search by name, album, date, photo tag, or a simple sentence.
 
 ## What It Can Do
 
@@ -67,6 +67,7 @@ The demo media is synthetic and does not contain private family photos.
 - Auto-propagate tags to matching untagged faces.
 - Cluster repeated faces in videos so one person is not shown dozens of times.
 - Search by one person, multiple people, albums, or descriptive photo tags.
+- Interpret simple natural-language searches offline, using your local people, albums, tags, and date filters.
 - Filter by media type, year, month, date, and sort direction.
 - Add albums during scan, or later per photo/video.
 - Hide videos with no visible/taggable faces by default.
@@ -96,23 +97,26 @@ Aman's first birthday
 Alex, Ironman Malaysia
 photos from 2022
 December 2022
+show me photos of Alex from 2022
+show videos with Alex and Jordan from December 2022
+show me Alex's first birthday photos from Ironman Malaysia
 ```
 
 Search terms can match people, albums, or descriptive photo tags. Multiple terms use comma-separated AND matching, so `Alex, Ironman Malaysia` returns files where both match.
 
-The planned OpenAI layer will make this more natural, so users can ask for memories in plain English instead of manually combining filters.
+Natural-language search is currently an offline parser, not an external AI call. It works best after you have tagged people and added albums or photo tags, because it matches your words against the local index. Unknown words are ignored rather than sent anywhere.
 
 ## Use of Codex and GPT-5.6
 
 Codex was used as a development collaborator throughout the project: planning the architecture, refactoring the backend, designing the SQLite schema, adding video support, creating tests, packaging the app with Tauri, preparing GitHub releases, and polishing documentation.
 
-GPT-5.6 is planned as the natural language layer for search. Instead of requiring users to manually combine filters, the app can interpret queries like:
+The app now includes a local first-pass natural-language parser for searches like:
 
 - “Show me photos of Aman from 2022”
 - “Find Ironman Malaysia photos with Preeti”
 - “Show videos from December 2022”
 
-The goal is to keep the private photo library local while using OpenAI to translate human search intent into structured local database queries.
+GPT-5.6 is planned as a future optional layer for richer query understanding. The goal is to keep the private photo library local while using OpenAI, when enabled by the user, only to translate human search intent into structured local database queries.
 
 ## Documentation
 
