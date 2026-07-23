@@ -53,6 +53,21 @@ class AlbumsAndTagsTest(unittest.TestCase):
         self.assertEqual(len(database.search_files(self.conn, album="malaysia trip")), 1)
         self.assertEqual(len(database.search_files(self.conn, tag="aman's first birthday")), 1)
 
+    def test_location_filters_match_city_region_or_country(self):
+        database.save_place(
+            self.conn,
+            "photo-1",
+            {"city": "Toronto", "region": "Ontario", "country": "Canada", "latitude": 43.65, "longitude": -79.38},
+        )
+
+        record = database.photo_to_record(self.conn, database.find_file(self.conn, "photo-1"))
+
+        self.assertEqual(record["place"]["city"], "Toronto")
+        self.assertEqual([place["name"] for place in database.list_places(self.conn)], ["Canada", "Ontario", "Toronto"])
+        self.assertEqual(len(database.search_files(self.conn, place="toronto")), 1)
+        self.assertEqual(len(database.search_files(self.conn, place="ontario")), 1)
+        self.assertEqual(len(database.search_files(self.conn, place="canada")), 1)
+
     def test_rescan_preserves_album_membership_and_photo_tags(self):
         album = database.create_album(self.conn, "Malaysia Trip")
         database.add_photo_to_album(self.conn, album["id"], "photo-1")

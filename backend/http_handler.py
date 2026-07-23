@@ -57,6 +57,7 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
                             conn,
                             year=single_param(params, "year"),
                             city=single_param(params, "city"),
+                            place=single_param(params, "place"),
                             album=single_param(params, "album"),
                             tag=single_param(params, "tag"),
                         )

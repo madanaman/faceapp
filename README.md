@@ -100,9 +100,11 @@ December 2022
 show me photos of Alex from 2022
 show videos with Alex and Jordan from December 2022
 show me Alex's first birthday photos from Ironman Malaysia
+photos from Toronto
+Alex, Toronto
 ```
 
-Search terms can match people, albums, or descriptive photo tags. Multiple terms use comma-separated AND matching, so `Alex, Ironman Malaysia` returns files where both match.
+Search terms can match people, albums, descriptive photo tags, or known places. Multiple terms use comma-separated AND matching, so `Alex, Ironman Malaysia` returns files where both match.
 
 Natural-language search is currently an offline parser, not an external AI call. It works best after you have tagged people and added albums or photo tags, because it matches your words against the local index. Unknown words are ignored rather than sent anywhere.
 

@@ -67,7 +67,8 @@ def parse_search_query(conn, query: str, today: date | None = None) -> dict:
     people = database.list_people(conn)
     albums = database.list_albums(conn)
     tags = database.list_tags(conn)
-    return parse_query(query, people=people, albums=albums, tags=tags, today=today)
+    places = database.list_places(conn)
+    return parse_query(query, people=people, albums=albums, tags=tags, places=places, today=today)
 
 
 def parse_query(
@@ -75,6 +76,7 @@ def parse_query(
     people: Iterable[dict],
     albums: Iterable[dict],
     tags: Iterable[dict],
+    places: Iterable[dict] = (),
     today: date | None = None,
 ) -> dict:
     today = today or date.today()
@@ -83,7 +85,7 @@ def parse_query(
     tokens = normalized.split()
     recognized_positions: set[int] = set()
 
-    entities, entity_positions = match_entities(tokens, people=people, albums=albums, tags=tags)
+    entities, entity_positions = match_entities(tokens, people=people, albums=albums, tags=tags, places=places)
     recognized_positions.update(entity_positions)
 
     date_parts, date_positions = parse_dates(raw_query, tokens, today=today)
@@ -117,9 +119,15 @@ def parse_query(
     return result
 
 
-def match_entities(tokens: list[str], people: Iterable[dict], albums: Iterable[dict], tags: Iterable[dict]) -> tuple[list[dict], set[int]]:
+def match_entities(
+    tokens: list[str],
+    people: Iterable[dict],
+    albums: Iterable[dict],
+    tags: Iterable[dict],
+    places: Iterable[dict] = (),
+) -> tuple[list[dict], set[int]]:
     candidates = []
-    for kind, rows in (("person", people), ("album", albums), ("tag", tags)):
+    for kind, rows in (("person", people), ("album", albums), ("tag", tags), ("place", places)):
         for row in rows:
             name = (row.get("name") or "").strip()
             phrase_tokens = normalize_text(name).split()

@@ -1095,8 +1095,14 @@ function matchesPeople(fileRecord, terms) {
     ...(fileRecord.faces || []).map((face) => normalizeName(face.tag)),
     ...(fileRecord.albums || []).map((album) => normalizeName(album.name)),
     ...(fileRecord.tags || []).map((tag) => normalizeName(tag.name)),
+    ...placeSearchTerms(fileRecord),
   ].filter(Boolean));
   return terms.every((term) => searchableTerms.has(term));
+}
+
+function placeSearchTerms(fileRecord) {
+  const place = fileRecord.place || {};
+  return [place.city, place.region, place.country].map(normalizeName).filter(Boolean);
 }
 
 function matchesSelectedAlbum(fileRecord) {

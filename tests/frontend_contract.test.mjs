@@ -229,3 +229,9 @@ test("library search includes people albums and custom photo tags", () => {
   assert.match(appJs, /\.\.\.\(fileRecord\.tags \|\| \[\]\)\.map\(\(tag\) => normalizeName\(tag\.name\)\)/);
   assert.match(appJs, /function matchesSelectedAlbum\(fileRecord\)/);
 });
+
+test("library search includes known photo places", () => {
+  assert.match(appJs, /function placeSearchTerms\(fileRecord\)/);
+  assert.match(appJs, /\[place\.city, place\.region, place\.country\]/);
+  assert.match(appJs, /\.\.\.placeSearchTerms\(fileRecord\)/);
+});

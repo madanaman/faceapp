@@ -17,6 +17,8 @@ Metadata API examples:
 ```text
 /api/search?year=2022
 /api/search?city=Toronto
+/api/search?place=Toronto
+/api/search?place=Canada
 /api/search?year=2022&city=Toronto
 /api/search?album=Malaysia%20Trip
 /api/search?tag=Aman%27s%20first%20birthday

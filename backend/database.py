@@ -159,6 +159,8 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         create index if not exists idx_photo_metadata_taken_at on photo_metadata(taken_at);
         create index if not exists idx_photo_metadata_lat_lon on photo_metadata(latitude, longitude);
         create index if not exists idx_photo_places_city on photo_places(city);
+        create index if not exists idx_photo_places_region on photo_places(region);
+        create index if not exists idx_photo_places_country on photo_places(country);
         create index if not exists idx_face_people_person_id on face_people(person_id);
         create index if not exists idx_ignored_faces_photo_id on ignored_faces(photo_id);
         create index if not exists idx_album_photos_photo_id on album_photos(photo_id);
@@ -238,6 +240,7 @@ def search_files(
     conn: sqlite3.Connection,
     year: str | None = None,
     city: str | None = None,
+    place: str | None = None,
     album: str | None = None,
     tag: str | None = None,
 ) -> list[dict]:
@@ -253,6 +256,10 @@ def search_files(
     if city:
         clauses.append("lower(pl.city) = lower(?)")
         params.append(city)
+
+    if place:
+        clauses.append("(lower(pl.city) = lower(?) or lower(pl.region) = lower(?) or lower(pl.country) = lower(?))")
+        params.extend([place, place, place])
 
     if album:
         clauses.append(
@@ -326,6 +333,24 @@ def list_albums(conn: sqlite3.Connection) -> list[dict]:
         }
         for row in rows
     ]
+
+
+def list_places(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        """
+        select name, type, count(*) as photo_count
+        from (
+            select city as name, 'city' as type from photo_places where city is not null and trim(city) != ''
+            union all
+            select region as name, 'region' as type from photo_places where region is not null and trim(region) != ''
+            union all
+            select country as name, 'country' as type from photo_places where country is not null and trim(country) != ''
+        )
+        group by lower(name), type
+        order by lower(name), type
+        """
+    ).fetchall()
+    return [{"name": row["name"], "type": row["type"], "photoCount": row["photo_count"]} for row in rows]
 
 
 def list_people(conn: sqlite3.Connection) -> list[dict]:
