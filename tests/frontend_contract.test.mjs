@@ -4,6 +4,7 @@ import test from "node:test";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const appJs = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
 
 test("face editor keeps both tag suggestions and remove control", () => {
   assert.match(html, /<input[^>]+list="personSuggestions"/);
@@ -38,6 +39,7 @@ test("people search excludes records with no matching tagged faces at search and
   assert.match(appJs, /\.filter\(matchesCurrentGalleryFilters\)/);
   assert.match(appJs, /if \(!matchesCurrentGalleryFilters\(fileRecord\)\) continue/);
   assert.match(appJs, /fileRecord\.faces \|\| \[\]/);
+  assert.match(appJs, /String\(name \?\? ""\)\.trim\(\)\.toLocaleLowerCase\(\)/);
 });
 
 test("gallery renders in scroll-loaded batches instead of all cards at once", () => {
@@ -80,16 +82,26 @@ test("gallery date filters and per-photo rescan controls stay wired", () => {
 });
 
 test("scan controls let the user choose photos, videos, or both and bulk-assign an album", () => {
+  assert.match(html, /id="pathInput" type="hidden"/);
+  assert.doesNotMatch(html, /placeholder="\/Users\/you\/Pictures\/Photo Library"/);
+  assert.match(html, /id="pickFolderBtn" class="primary"[^>]*>Choose Folder<\/button>/);
+  assert.match(html, /id="folderLabel">Choose a folder to start<\/span>/);
   assert.match(html, /id="scanMode"/);
   assert.match(html, /id="scanAlbumInput"/);
+  assert.match(html, /id="scanLocationInput"/);
+  assert.match(html, /id="scanPathBtn" class="primary">Scan<\/button>/);
+  assert.match(html, /id="locationSuggestions"/);
   assert.match(html, /id="albumSuggestions"/);
   assert.match(html, /value="photos"/);
   assert.match(html, /value="videos"/);
   assert.match(html, /value="both"/);
   assert.match(appJs, /scanMode: document\.querySelector\("#scanMode"\)/);
   assert.match(appJs, /scanAlbumInput: document\.querySelector\("#scanAlbumInput"\)/);
-  assert.match(appJs, /body: JSON\.stringify\(\{ path, scanMode, albumName \}\)/);
+  assert.match(appJs, /body: JSON\.stringify\(\{ path, scanMode, albumName, location \}\)/);
   assert.match(appJs, /function renderAlbumSuggestions\(\)/);
+  assert.match(appJs, /function scanLocationInput\(\)/);
+  assert.match(appJs, /function locationFromInput\(input\)/);
+  assert.match(appJs, /Choose a folder first\./);
 });
 
 test("video records can render in the gallery and lightbox", () => {
@@ -119,7 +131,9 @@ test("video face rows collapse repeated tagged names and paths are shortened for
   assert.match(appJs, /groupedFaceIds/);
   assert.match(appJs, /function displayFileLocation\(/);
   assert.match(appJs, /function displayFolderName\(/);
+  assert.match(appJs, /parts\.slice\(-3\)\.join\(" \/ "\)/);
   assert.match(appJs, /path\.title = fileRecord\.path/);
+  assert.match(styles, /#folderLabel\s*{[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap;/s);
 });
 
 test("face thumbnails from backend media paths render without recropping video faces", () => {
@@ -163,10 +177,11 @@ test("tag editor targets the text input, not the bulk-select checkbox", () => {
 
 test("tag editor saves explicitly on blur or Enter", () => {
   assert.match(appJs, /const commitTag = async \(\) =>/);
-  assert.match(appJs, /input\.addEventListener\("blur", \(\) => \{\s*commitTag\(\)/s);
+  assert.match(appJs, /input\.addEventListener\("blur", \(\) => \{\s*void commitTag\(\)/s);
+  assert.match(appJs, /input\.addEventListener\("focusout", \(\) => \{\s*void commitTag\(\)/s);
   assert.match(appJs, /input\.addEventListener\("keydown", \(event\) => \{\s*if \(event\.key === "Enter"\)/s);
   assert.match(appJs, /event\.preventDefault\(\)/);
-  assert.match(appJs, /commitTag\(\)/);
+  assert.match(appJs, /void commitTag\(\)/);
 });
 
 test("tag save patches the edited gallery card instead of rerendering every media item", () => {
@@ -175,12 +190,14 @@ test("tag save patches the edited gallery card instead of rerendering every medi
   assert.match(appJs, /card\.replaceWith\(renderPhoto\(fileRecord\)\)/);
   assert.match(appJs, /function applyTagToFileRecord\(fileRecord, faceIds, tag\)/);
   assert.match(appJs, /function syncFileRecord\(fileRecord, updatedFile\)/);
+  assert.match(appJs, /function updateAfterFaceTag\(fileRecord, faceIds, tag, payload = null\)/);
   assert.match(appJs, /function refreshRenderedFaceTags\(\)/);
   assert.match(appJs, /Object\.assign\(fileRecord, updatedFile\)/);
   assert.match(appJs, /chip\.dataset\.faceId = face\.id/);
   assert.match(appJs, /box\.dataset\.faceId = face\.id/);
   assert.match(appJs, /tagsByFaceId\.get\(chip\.dataset\.faceId\)/);
   assert.match(appJs, /input\.value = tag/);
+  assert.match(appJs, /updateAfterFaceTag\(fileRecord, faceIds, cleanTag, payload\)/);
   assert.match(appJs, /function shouldRerenderAfterTag\(fileRecord\)/);
   assert.match(appJs, /if \(shouldRerenderAfterTag\(currentFile\) \|\| !replaceGalleryCard\(fileRecord\.id\)\)/);
   assert.match(appJs, /refreshRenderedFaceTags\(\)/);
@@ -213,6 +230,55 @@ test("albums and descriptive photo tags are available from the gallery", () => {
   assert.match(appJs, /postLibraryMutation\("\/api\/photos\/tags"/);
   assert.match(appJs, /function removeCustomPhotoTag\(fileRecord, tagId, tagName, button\)/);
   assert.match(appJs, /deleteLibraryMutation\("\/api\/photos\/tags"/);
+});
+
+test("photo cards collapse faces and organize controls by default", () => {
+  assert.match(html, /class="card-section faces-section"/);
+  assert.match(html, /class="card-section organize-section"/);
+  assert.match(html, /<summary>Faces<\/summary>/);
+  assert.match(html, /<summary>Organize<\/summary>/);
+  assert.match(html, /class="photo-badges"/);
+  assert.match(html, /class="face-summary"/);
+  assert.match(appJs, /facesSection\.open = visibleFaces\.some\(\(face\) => !normalizeName\(face\.tag\)\)/);
+  assert.match(appJs, /function formatFaceSummary\(fileRecord, visibleFaces\)/);
+});
+
+test("locations can be browsed resolved and edited from the UI", () => {
+  assert.match(html, /id="locationToggle"/);
+  assert.match(html, /aria-label="Browse locations"/);
+  assert.match(html, /<svg viewBox="0 0 24 24" aria-hidden="true">/);
+  assert.match(html, /id="locationPanel"/);
+  assert.match(html, /id="locationList"/);
+  assert.match(html, /id="resolveLocationsBtn"/);
+  assert.match(html, /class="location-input"/);
+  assert.match(html, /class="save-location[^"]*"/);
+  assert.match(html, /class="remove-location[^"]*"/);
+  assert.match(appJs, /fetch\(apiUrl\("\/api\/locations"\)\)/);
+  assert.match(appJs, /\/api\/locations\/suggest\?q=/);
+  assert.match(appJs, /function scheduleLocationSuggestions\(query\)/);
+  assert.match(appJs, /function renderLocations\(\)/);
+  assert.match(appJs, /function locationTree\(\)/);
+  assert.match(appJs, /function setLocationFilter\(type, place, closePanel = false\)/);
+  assert.match(appJs, /function matchesLocationFilter\(fileRecord\)/);
+  assert.match(appJs, /openLocationNodes: new Set\(\)/);
+  assert.match(appJs, /function toggleLocationNode\(event, key, node\)/);
+  assert.match(appJs, /state\.openLocationNodes\.has\(countryKey\)/);
+  assert.match(appJs, /unresolvedGpsCount\(\)/);
+  assert.match(appJs, /function resolveLocations\(\)/);
+  assert.match(appJs, /postLibraryMutation\("\/api\/locations\/resolve"/);
+  assert.match(appJs, /postLibraryMutation\("\/api\/photos\/location"/);
+  assert.match(appJs, /deleteLibraryMutation\("\/api\/photos\/location"/);
+  assert.match(styles, /\.location-panel\s*{[^}]*position: absolute;[^}]*width: min\(380px, calc\(100vw - 40px\)\);/s);
+  assert.match(styles, /\.location-list\s*{[^}]*max-height: 188px;[^}]*overflow-y: auto;/s);
+});
+
+test("clear index resets frontend location state", () => {
+  assert.match(appJs, /async function clearIndex\(\)/);
+  assert.match(appJs, /state\.locations = \[\]/);
+  assert.match(appJs, /state\.locationSuggestions\.clear\(\)/);
+  assert.match(appJs, /state\.openLocationNodes\.clear\(\)/);
+  assert.match(appJs, /els\.locationSuggestions\.replaceChildren\(\)/);
+  assert.match(appJs, /renderLocations\(\)/);
 });
 
 test("desktop shell keeps Tauri bridge and routes backend calls through dynamic URL", () => {

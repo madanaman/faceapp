@@ -22,7 +22,7 @@ def file_signature(path: Path) -> str:
     return f"{path.name}:{stat.st_size}:{int(stat.st_mtime)}"
 
 
-def scan_folder(folder: Path, scan_mode: str = "photos", album_name: str = "") -> dict:
+def scan_folder(folder: Path, scan_mode: str = "photos", album_name: str = "", scan_location: dict | None = None) -> dict:
     if not folder.exists() or not folder.is_dir():
         raise ValueError("Folder does not exist or is not a directory.")
     if scan_mode not in SCAN_MODES:
@@ -32,7 +32,8 @@ def scan_folder(folder: Path, scan_mode: str = "photos", album_name: str = "") -
     auto_tagged = 0
     warnings = []
     clean_album_name = album_name.strip()
-    logger.info("Scanning folder=%s mode=%s album=%s", folder, scan_mode, clean_album_name)
+    default_place = scan_default_place(scan_location or {})
+    logger.info("Scanning folder=%s mode=%s album=%s location=%s", folder, scan_mode, clean_album_name, default_place)
 
     with database.connection() as conn:
         album = None
@@ -65,6 +66,9 @@ def scan_folder(folder: Path, scan_mode: str = "photos", album_name: str = "") -
                         metadata = extract_photo_metadata(path) if is_image(path) else {}
                         database.save_metadata(conn, file_id, metadata)
                         database.save_place(conn, file_id, gps_place(metadata))
+                        record = database.photo_to_record(conn, existing)
+                    if default_place:
+                        database.save_place(conn, file_id, merge_place(gps_place(record.get("metadata", {})), default_place))
                         record = database.photo_to_record(conn, existing)
                     if album:
                         database.add_photo_to_album(conn, album["id"], file_id)
@@ -108,7 +112,7 @@ def scan_folder(folder: Path, scan_mode: str = "photos", album_name: str = "") -
                     "faces": analysis["faces"],
                     "clusters": analysis.get("clusters", []),
                     "metadata": metadata,
-                    "place": gps_place(metadata),
+                    "place": merge_place(gps_place(metadata), default_place),
                 }
                 database.save_file(conn, record)
                 if album:
@@ -197,6 +201,30 @@ def gps_place(metadata: dict) -> dict:
         "latitude": metadata.get("latitude"),
         "longitude": metadata.get("longitude"),
         "source": "exif_gps" if metadata.get("latitude") is not None else None,
+    }
+
+
+def scan_default_place(place: dict) -> dict:
+    city = (place.get("city") or "").strip()
+    region = (place.get("region") or "").strip()
+    country = (place.get("country") or "").strip()
+    if not any((city, region, country)):
+        return {}
+    return {
+        "city": city,
+        "region": region,
+        "country": country,
+        "source": "scan_default",
+    }
+
+
+def merge_place(gps: dict, default_place: dict) -> dict:
+    if not default_place:
+        return gps
+    return {
+        **default_place,
+        "latitude": gps.get("latitude"),
+        "longitude": gps.get("longitude"),
     }
 
 

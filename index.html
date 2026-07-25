@@ -19,14 +19,13 @@
 
     <main>
       <section class="control-band">
-      <div class="folder-state">
+        <div class="folder-state">
           <span id="supportBadge" class="badge">Checking local engine</span>
-          <span id="folderLabel">No folder selected</span>
+          <span id="folderLabel">Choose a folder to start</span>
         </div>
         <div class="path-row">
-          <label for="pathInput">Folder</label>
-          <input id="pathInput" type="text" placeholder="/Users/you/Pictures/Photo Library">
-          <button id="pickFolderBtn" class="ghost" type="button" hidden>Choose Folder</button>
+          <input id="pathInput" type="hidden">
+          <button id="pickFolderBtn" class="primary" type="button" hidden>Choose Folder</button>
           <label class="scan-label" for="scanMode">
             Scan
             <select id="scanMode">
@@ -39,12 +38,34 @@
             Album
             <input id="scanAlbumInput" type="text" placeholder="Optional album" list="albumSuggestions">
           </label>
-          <button id="scanPathBtn" class="primary">Scan Path</button>
+          <label class="scan-location-label" for="scanLocationInput">
+            Location
+            <input id="scanLocationInput" type="text" placeholder="Delhi, India" list="locationSuggestions">
+          </label>
+          <button id="scanPathBtn" class="primary">Scan</button>
         </div>
         <div class="search-row">
           <label for="searchInput">Search library</label>
           <input id="searchInput" type="search" placeholder="Aman, Ironman Malaysia or photos of Aman from 2022">
           <button id="searchBtn">Search</button>
+          <button id="locationToggle" class="icon-button" type="button" aria-label="Browse locations" aria-expanded="false" aria-controls="locationPanel" title="Browse locations">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"></circle>
+              <path d="M3 12h18"></path>
+              <path d="M12 3a14 14 0 0 1 0 18"></path>
+              <path d="M12 3a14 14 0 0 0 0 18"></path>
+            </svg>
+          </button>
+          <div id="locationPanel" class="location-panel" hidden>
+            <div class="location-head">
+              <strong>Locations</strong>
+              <div>
+                <button id="resolveLocationsBtn" class="mini" type="button">Name GPS places</button>
+                <button id="locationClose" class="mini ghost" type="button">Close</button>
+              </div>
+            </div>
+            <div id="locationList" class="location-list"></div>
+          </div>
           <button id="showAllBtn" class="ghost">Show All</button>
         </div>
       </section>
@@ -199,6 +220,19 @@
         <div class="photo-meta">
           <strong class="file-name"></strong>
           <span class="file-path"></span>
+          <div class="photo-badges"></div>
+          <span class="face-summary"></span>
+        </div>
+        <details class="card-section faces-section">
+          <summary>Faces</summary>
+          <div class="bulk-face-actions" hidden>
+            <span class="bulk-face-count">0 selected</span>
+            <button class="bulk-remove-face" type="button">Remove selected</button>
+          </div>
+          <div class="faces"></div>
+        </details>
+        <details class="card-section organize-section">
+          <summary>Organize</summary>
           <div class="photo-actions">
             <button class="rescan-photo" type="button">Rescan faces</button>
             <button class="reset-ignored" type="button">Reset ignored</button>
@@ -212,13 +246,13 @@
               <input class="custom-tag-input" type="text" placeholder="Aman's first birthday">
               <button class="add-custom-tag mini" type="button">Add tag</button>
             </div>
+            <div class="location-editor">
+              <input class="location-input" type="text" placeholder="Delhi, India" list="locationSuggestions">
+              <button class="save-location mini" type="button">Save location</button>
+              <button class="remove-location mini ghost" type="button">Remove</button>
+            </div>
           </div>
-        </div>
-        <div class="bulk-face-actions" hidden>
-          <span class="bulk-face-count">0 selected</span>
-          <button class="bulk-remove-face" type="button">Remove selected</button>
-        </div>
-        <div class="faces"></div>
+        </details>
       </article>
     </template>
 
@@ -236,6 +270,7 @@
 
     <datalist id="personSuggestions"></datalist>
     <datalist id="albumSuggestions"></datalist>
+    <datalist id="locationSuggestions"></datalist>
 
     <script src="./app.js" type="module"></script>
   </body>

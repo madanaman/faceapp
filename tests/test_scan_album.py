@@ -36,7 +36,7 @@ class ScanAlbumTest(unittest.TestCase):
     def connection(self):
         yield self.conn
 
-    def scan(self, album_name):
+    def scan(self, album_name, scan_location=None, metadata=None):
         analysis = {
             "width": 100,
             "height": 100,
@@ -47,9 +47,9 @@ class ScanAlbumTest(unittest.TestCase):
         with (
             patch.object(scanner.database, "connection", self.connection),
             patch.object(scanner, "analyze_path", return_value=analysis),
-            patch.object(scanner, "extract_photo_metadata", return_value={}),
+            patch.object(scanner, "extract_photo_metadata", return_value=metadata or {}),
         ):
-            return scanner.scan_folder(self.folder, scan_mode="photos", album_name=album_name)
+            return scanner.scan_folder(self.folder, scan_mode="photos", album_name=album_name, scan_location=scan_location or {})
 
     def test_scan_assigns_new_and_existing_files_to_album(self):
         first = self.scan("Malaysia Trip")
@@ -61,6 +61,20 @@ class ScanAlbumTest(unittest.TestCase):
 
         self.assertEqual(albums, {"Malaysia Trip", "Family Favorites"})
         self.assertEqual(len(second["albums"]), 2)
+
+    def test_scan_assigns_default_location_and_preserves_gps_coordinates(self):
+        result = self.scan(
+            "",
+            scan_location={"city": "Kuala Lumpur", "region": "Kuala Lumpur", "country": "Malaysia"},
+            metadata={"latitude": 3.139, "longitude": 101.6869},
+        )
+
+        place = result["files"][0]["place"]
+
+        self.assertEqual(place["city"], "Kuala Lumpur")
+        self.assertEqual(place["country"], "Malaysia")
+        self.assertEqual(place["latitude"], 3.139)
+        self.assertEqual(place["source"], "scan_default")
 
 
 if __name__ == "__main__":

@@ -11,12 +11,15 @@ Useful collection variables:
 - `tagName`: sample person tag for `POST /api/tag`
 - `albumId`, `albumName`: sample album values
 - `photoTagId`, `photoTagName`: sample descriptive photo-tag values
+- `locationLabel`, `locationCity`, `locationRegion`, `locationCountry`: sample manual or scan-time location values
 
 Metadata API examples:
 
 ```text
 /api/search?year=2022
 /api/search?city=Toronto
+/api/search?region=Ontario
+/api/search?country=Canada
 /api/search?place=Toronto
 /api/search?place=Canada
 /api/search?year=2022&city=Toronto
@@ -24,4 +27,14 @@ Metadata API examples:
 /api/search?tag=Aman%27s%20first%20birthday
 ```
 
-Year queries use `photo_metadata.taken_at`. City queries use `photo_places.city`, so GPS-only photos need a future reverse-geocoding enrichment step before natural place searches like `Toronto` become reliable.
+Location API examples:
+
+```text
+GET /api/locations
+GET /api/locations/suggest?q=Delhi
+POST /api/locations/resolve
+POST /api/photos/location
+DELETE /api/photos/location
+```
+
+Year queries use `photo_metadata.taken_at`. Place queries use `photo_places.city`, `photo_places.region`, and `photo_places.country`. GPS-only photos become searchable by place name after `POST /api/locations/resolve` fills those fields, or after you add a scan-time/manual location.

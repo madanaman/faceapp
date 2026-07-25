@@ -7,9 +7,16 @@ import sqlite3
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from .config import DB_PATH, face_box_iou_threshold, face_reconcile_threshold, match_threshold
+from .config import DB_PATH, face_box_iou_threshold, face_reconcile_threshold, location_cache_precision, match_threshold
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
+PLACE_SOURCE_PRIORITY = {
+    "raw_gps": 1,
+    "exif_gps": 1,
+    "scan_default": 2,
+    "gps_reverse_geocode": 3,
+    "manual": 4,
+}
 logger = logging.getLogger(__name__)
 
 
@@ -122,6 +129,17 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
             source text
         );
 
+        create table if not exists location_cache (
+            cache_key text primary key,
+            latitude real not null,
+            longitude real not null,
+            city text,
+            region text,
+            country text,
+            provider text not null,
+            resolved_at text not null
+        );
+
         create table if not exists albums (
             id integer primary key autoincrement,
             name text not null collate nocase unique,
@@ -161,6 +179,7 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         create index if not exists idx_photo_places_city on photo_places(city);
         create index if not exists idx_photo_places_region on photo_places(region);
         create index if not exists idx_photo_places_country on photo_places(country);
+        create index if not exists idx_location_cache_lat_lon on location_cache(latitude, longitude);
         create index if not exists idx_face_people_person_id on face_people(person_id);
         create index if not exists idx_ignored_faces_photo_id on ignored_faces(photo_id);
         create index if not exists idx_album_photos_photo_id on album_photos(photo_id);
@@ -240,6 +259,8 @@ def search_files(
     conn: sqlite3.Connection,
     year: str | None = None,
     city: str | None = None,
+    region: str | None = None,
+    country: str | None = None,
     place: str | None = None,
     album: str | None = None,
     tag: str | None = None,
@@ -256,6 +277,14 @@ def search_files(
     if city:
         clauses.append("lower(pl.city) = lower(?)")
         params.append(city)
+
+    if region:
+        clauses.append("lower(pl.region) = lower(?)")
+        params.append(region)
+
+    if country:
+        clauses.append("lower(pl.country) = lower(?)")
+        params.append(country)
 
     if place:
         clauses.append("(lower(pl.city) = lower(?) or lower(pl.region) = lower(?) or lower(pl.country) = lower(?))")
@@ -351,6 +380,182 @@ def list_places(conn: sqlite3.Connection) -> list[dict]:
         """
     ).fetchall()
     return [{"name": row["name"], "type": row["type"], "photoCount": row["photo_count"]} for row in rows]
+
+
+def known_location_suggestions(conn: sqlite3.Connection, query: str, limit: int) -> list[dict]:
+    clean_query = query.strip()
+    if not clean_query:
+        return []
+    rows = conn.execute(
+        """
+        select city, region, country, latitude, longitude, 'indexed' as provider, max(source) as source
+        from photo_places
+        where coalesce(trim(city), '') != ''
+           or coalesce(trim(region), '') != ''
+           or coalesce(trim(country), '') != ''
+        group by lower(coalesce(city, '')), lower(coalesce(region, '')), lower(coalesce(country, ''))
+        union all
+        select city, region, country, latitude, longitude, provider, 'cache' as source
+        from location_cache
+        where coalesce(trim(city), '') != ''
+           or coalesce(trim(region), '') != ''
+           or coalesce(trim(country), '') != ''
+        """
+    ).fetchall()
+
+    normalized_query = clean_query.lower()
+    suggestions = []
+    seen = set()
+    for row in rows:
+        suggestion = location_suggestion_from_row(row)
+        key = location_suggestion_key(suggestion)
+        if key in seen or normalized_query not in suggestion["label"].lower():
+            continue
+        seen.add(key)
+        suggestions.append(suggestion)
+        if len(suggestions) >= limit:
+            break
+    return suggestions
+
+
+def location_suggestion_from_row(row: sqlite3.Row) -> dict:
+    city = row["city"] or ""
+    region = row["region"] or ""
+    country = row["country"] or ""
+    return {
+        "label": location_label(city, region, country),
+        "city": city,
+        "region": region,
+        "country": country,
+        "latitude": row["latitude"],
+        "longitude": row["longitude"],
+        "provider": row["provider"] or "",
+        "source": row["source"] or "",
+    }
+
+
+def location_label(city: str, region: str, country: str) -> str:
+    return ", ".join(part for part in (city, region, country) if part)
+
+
+def location_suggestion_key(suggestion: dict) -> tuple:
+    return (
+        (suggestion.get("city") or "").lower(),
+        (suggestion.get("region") or "").lower(),
+        (suggestion.get("country") or "").lower(),
+    )
+
+
+def location_cache_key(latitude: float, longitude: float) -> str:
+    precision = location_cache_precision()
+    return f"{round(float(latitude), precision):.{precision}f},{round(float(longitude), precision):.{precision}f}"
+
+
+def cached_location(conn: sqlite3.Connection, latitude: float, longitude: float) -> dict:
+    row = conn.execute(
+        "select * from location_cache where cache_key = ?",
+        (location_cache_key(latitude, longitude),),
+    ).fetchone()
+    return row_dict(row)
+
+
+def save_location_cache(
+    conn: sqlite3.Connection,
+    latitude: float,
+    longitude: float,
+    place: dict,
+    provider: str,
+) -> dict:
+    cache_key = location_cache_key(latitude, longitude)
+    resolved_at = datetime.now(UTC).isoformat(timespec="seconds")
+    conn.execute(
+        """
+        insert into location_cache
+        (cache_key, latitude, longitude, city, region, country, provider, resolved_at)
+        values (?, ?, ?, ?, ?, ?, ?, ?)
+        on conflict(cache_key) do update set
+            latitude = excluded.latitude,
+            longitude = excluded.longitude,
+            city = excluded.city,
+            region = excluded.region,
+            country = excluded.country,
+            provider = excluded.provider,
+            resolved_at = excluded.resolved_at
+        """,
+        (
+            cache_key,
+            latitude,
+            longitude,
+            place.get("city"),
+            place.get("region"),
+            place.get("country"),
+            provider,
+            resolved_at,
+        ),
+    )
+    return {
+        "cacheKey": cache_key,
+        "latitude": latitude,
+        "longitude": longitude,
+        "city": place.get("city") or "",
+        "region": place.get("region") or "",
+        "country": place.get("country") or "",
+        "provider": provider,
+        "resolvedAt": resolved_at,
+    }
+
+
+def unresolved_gps_places(conn: sqlite3.Connection, limit: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        select *
+        from photo_places
+        where latitude is not null
+          and longitude is not null
+          and (
+              coalesce(trim(city), '') = ''
+              or coalesce(trim(region), '') = ''
+              or coalesce(trim(country), '') = ''
+              or source in ('raw_gps', 'exif_gps', 'scan_default')
+          )
+          and coalesce(source, '') != 'manual'
+        order by photo_id
+        limit ?
+        """,
+        (limit,),
+    ).fetchall()
+    return [row_dict(row) for row in rows]
+
+
+def set_photo_location(
+    conn: sqlite3.Connection,
+    photo_id: str,
+    city: str = "",
+    region: str = "",
+    country: str = "",
+    latitude: float | None = None,
+    longitude: float | None = None,
+    source: str = "manual",
+) -> None:
+    if not find_file(conn, photo_id):
+        raise ValueError("Photo not found")
+    existing = conn.execute("select * from photo_places where photo_id = ?", (photo_id,)).fetchone()
+    place = {
+        "city": city.strip(),
+        "region": region.strip(),
+        "country": country.strip(),
+        "latitude": latitude if latitude is not None else existing["latitude"] if existing else None,
+        "longitude": longitude if longitude is not None else existing["longitude"] if existing else None,
+        "source": source,
+    }
+    save_place(conn, photo_id, place)
+
+
+def remove_photo_location(conn: sqlite3.Connection, photo_id: str) -> None:
+    if not find_file(conn, photo_id):
+        raise ValueError("Photo not found")
+    conn.execute("delete from photo_places where photo_id = ?", (photo_id,))
+    logger.info("Photo location removed photo_id=%s", photo_id)
 
 
 def list_people(conn: sqlite3.Connection) -> list[dict]:
@@ -902,8 +1107,24 @@ def save_metadata(conn: sqlite3.Connection, photo_id: str, metadata: dict) -> No
 def save_place(conn: sqlite3.Connection, photo_id: str, place: dict) -> None:
     latitude = place.get("latitude")
     longitude = place.get("longitude")
-    if latitude is None and longitude is None and not any(place.get(key) for key in ("city", "region", "country")):
+    city = (place.get("city") or "").strip()
+    region = (place.get("region") or "").strip()
+    country = (place.get("country") or "").strip()
+    source = place.get("source") or ("manual" if any((city, region, country)) else "raw_gps")
+    if latitude is None and longitude is None and not any((city, region, country)):
         return
+
+    existing = conn.execute("select * from photo_places where photo_id = ?", (photo_id,)).fetchone()
+    if existing and place_source_priority(existing["source"]) > place_source_priority(source):
+        city = existing["city"] or city
+        region = existing["region"] or region
+        country = existing["country"] or country
+        latitude = existing["latitude"] if existing["latitude"] is not None else latitude
+        longitude = existing["longitude"] if existing["longitude"] is not None else longitude
+        source = existing["source"]
+    elif existing:
+        latitude = latitude if latitude is not None else existing["latitude"]
+        longitude = longitude if longitude is not None else existing["longitude"]
 
     conn.execute(
         """
@@ -920,14 +1141,18 @@ def save_place(conn: sqlite3.Connection, photo_id: str, place: dict) -> None:
         """,
         (
             photo_id,
-            place.get("city"),
-            place.get("region"),
-            place.get("country"),
+            city or None,
+            region or None,
+            country or None,
             latitude,
             longitude,
-            place.get("source"),
+            source,
         ),
     )
+
+
+def place_source_priority(source: str | None) -> int:
+    return PLACE_SOURCE_PRIORITY.get(source or "", 0)
 
 
 def set_face_tag(conn: sqlite3.Connection, face_id: str, tag: str, source: str) -> None:
@@ -1018,6 +1243,7 @@ def clear_files(conn: sqlite3.Connection) -> None:
     conn.execute("delete from albums")
     conn.execute("delete from photo_tags")
     conn.execute("delete from photo_places")
+    conn.execute("delete from location_cache")
     conn.execute("delete from photo_metadata")
     conn.execute("delete from photos")
     if table_exists(conn, "files"):

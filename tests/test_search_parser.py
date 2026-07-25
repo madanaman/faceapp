@@ -92,6 +92,17 @@ class SearchParserTest(unittest.TestCase):
         self.assertEqual(result["mediaType"], "photos")
         self.assertEqual(result["year"], "2022")
 
+    def test_parses_known_region_names(self):
+        result = parse_search_query(
+            self.conn,
+            "photos from Ontario",
+            today=date(2026, 7, 19),
+        )
+
+        self.assertTrue(result["hasInterpretation"])
+        self.assertEqual(result["terms"], ["Ontario"])
+        self.assertIn({"type": "place", "name": "Ontario"}, result["entities"])
+
 
 if __name__ == "__main__":
     unittest.main()
