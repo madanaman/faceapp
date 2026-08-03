@@ -52,11 +52,18 @@ test("gallery renders in scroll-loaded batches instead of all cards at once", ()
 test("gallery cards keep the enlarged photo lightbox with previous and next controls", () => {
   assert.match(html, /id="lightbox"/);
   assert.match(html, /id="lightboxImage"/);
+  assert.match(html, /id="lightboxUnavailable" class="media-unavailable" hidden/);
   assert.match(html, /id="lightboxPrev"/);
   assert.match(html, /id="lightboxNext"/);
   assert.match(appJs, /function openLightbox\(/);
   assert.match(appJs, /function stepLightbox\(/);
   assert.match(appJs, /mediaWrap\.addEventListener\("click", \(\) => openLightbox\(fileRecord\.id\)\)/);
+  assert.match(appJs, /createMediaElement\(fileRecord, \(\) => showMediaUnavailable\(mediaWrap, fileRecord\)\)/);
+  assert.match(appJs, /function showMediaUnavailable\(container, fileRecord\)/);
+  assert.match(appJs, /function showLightboxMediaUnavailable\(fileRecord\)/);
+  assert.match(appJs, /addEventListener\("error", onUnavailable, \{ once: true \}\)/);
+  assert.match(styles, /\.media-unavailable\s*{/);
+  assert.match(styles, /\.lightbox-frame \.media-unavailable\s*{/);
 });
 
 test("tagging and face removal show a busy overlay while changes apply", () => {
@@ -279,6 +286,56 @@ test("clear index resets frontend location state", () => {
   assert.match(appJs, /state\.openLocationNodes\.clear\(\)/);
   assert.match(appJs, /els\.locationSuggestions\.replaceChildren\(\)/);
   assert.match(appJs, /renderLocations\(\)/);
+});
+
+test("backup and restore controls are wired to backend APIs", () => {
+  assert.doesNotMatch(html, /id="backupPathInput"/);
+  assert.match(html, /id="includeMediaBackup"/);
+  assert.match(html, /class="library-maintenance"/);
+  assert.match(html, /id="libraryBackupMode"/);
+  assert.match(html, /id="libraryRestoreMode"/);
+  assert.match(html, /id="backupPanel" class="maintenance-panel" hidden/);
+  assert.match(html, /id="restorePanel" class="maintenance-panel" hidden/);
+  assert.match(html, /id="chooseBackupFolderBtn"/);
+  assert.match(html, /id="backupFolderLabel"/);
+  assert.match(html, /id="backupBtn"/);
+  assert.doesNotMatch(html, /id="restorePathInput"/);
+  assert.doesNotMatch(html, /id="validateRestoreBtn"/);
+  assert.match(html, /id="chooseRestoreFolderBtn"/);
+  assert.match(html, /id="restoreFolderLabel"/);
+  assert.match(html, /id="restoreBtn"/);
+  assert.match(html, /id="backupStatus"/);
+  assert.match(html, /id="backupWarningsToggle"/);
+  assert.match(html, /id="backupWarningsPanel" class="backup-warnings" hidden/);
+  assert.match(html, /id="backupWarningsList"/);
+  assert.match(html, /id="clearDbBtn"/);
+  assert.match(appJs, /function createLibraryBackup\(\)/);
+  assert.match(appJs, /function validateLibraryRestore\(\)/);
+  assert.match(appJs, /function restoreLibraryBackup\(\)/);
+  assert.match(appJs, /function toggleLibraryToolMode\(mode\)/);
+  assert.match(appJs, /function setLibraryToolMode\(mode\)/);
+  assert.match(appJs, /function setBackupWarnings\(warnings = \[\]\)/);
+  assert.match(appJs, /function toggleBackupWarnings\(\)/);
+  assert.match(appJs, /function setBackupWarningsPanel\(isOpen\)/);
+  assert.match(appJs, /els\.libraryBackupMode\.addEventListener\("click", \(\) => toggleLibraryToolMode\("backup"\)\)/);
+  assert.match(appJs, /els\.libraryRestoreMode\.addEventListener\("click", \(\) => toggleLibraryToolMode\("restore"\)\)/);
+  assert.match(appJs, /els\.backupWarningsToggle\.addEventListener\("click", toggleBackupWarnings\)/);
+  assert.match(appJs, /setLibraryToolMode\(currentMode === mode \? "" : mode\)/);
+  assert.match(appJs, /els\.chooseRestoreFolderBtn\.addEventListener\("click", chooseRestoreFolder\)/);
+  assert.match(appJs, /await validateLibraryRestore\(\)/);
+  assert.match(appJs, /els\.restoreBtn\.disabled = false/);
+  assert.match(appJs, /function describeRestoreValidation\(payload\)/);
+  assert.match(appJs, /postLibraryMutation\("\/api\/backup"/);
+  assert.match(appJs, /fetch\(apiUrl\("\/api\/restore\/validate"\)/);
+  assert.match(appJs, /postLibraryMutation\("\/api\/restore"/);
+  assert.match(appJs, /const restorePrompt = warningCount/);
+  assert.match(appJs, /confirm\(restorePrompt\)/);
+  assert.match(appJs, /This backup has \$\{warningCount\} warning/);
+  assert.match(appJs, /payload\.skippedMediaCount/);
+  assert.match(styles, /\.library-maintenance\s*{/);
+  assert.match(styles, /\.maintenance-panel\s*{/);
+  assert.match(styles, /\.backup-warnings\s*{[^}]*max-height: 150px;[^}]*overflow-y: auto;/s);
+  assert.match(styles, /\.backup-status\.error\s*{/);
 });
 
 test("desktop shell keeps Tauri bridge and routes backend calls through dynamic URL", () => {

@@ -9,9 +9,10 @@ Current roadmap:
   - Add optional reverse geocoding for GPS-only photos.
   - Add UI controls for reviewing and correcting places.
 - Backup and restore to external folder:
-  - Export SQLite index, generated thumbnails, and a manifest with checksums.
-  - Optionally copy original media into the backup target.
-  - Restore into a new local library without cloud dependencies.
+  - V1 supports metadata and full folder backups with a checksum manifest.
+  - V1 restores the local index, thumbnails, and optionally copied media.
+  - Future work: scheduled backups while the app is open, with daily/weekly/monthly options.
+  - Future work: incremental backups, encryption, and conflict handling.
 - Multi-profile local users:
   - Add local profiles for separate users/libraries on one computer.
   - Scope people, albums, tags, ignored faces, and settings by library/profile.

@@ -13,7 +13,7 @@
         <h1>Face Library</h1>
       </div>
       <div class="actions">
-        <button id="clearDbBtn" class="ghost">Clear Index</button>
+        <button id="clearDbBtn" class="ghost" type="button">Clear Index</button>
       </div>
     </header>
 
@@ -67,6 +67,36 @@
             <div id="locationList" class="location-list"></div>
           </div>
           <button id="showAllBtn" class="ghost">Show All</button>
+        </div>
+        <div class="library-maintenance" aria-label="Backup and restore">
+          <div class="maintenance-head">
+            <strong>Backup &amp; Restore</strong>
+            <div class="maintenance-actions">
+              <button id="libraryBackupMode" class="mini ghost" type="button" aria-expanded="false" aria-controls="backupPanel">Backup</button>
+              <button id="libraryRestoreMode" class="mini ghost" type="button" aria-expanded="false" aria-controls="restorePanel">Restore</button>
+            </div>
+          </div>
+          <div id="backupPanel" class="maintenance-panel" hidden>
+            <button id="chooseBackupFolderBtn" class="mini" type="button">Choose backup folder</button>
+            <label class="library-check" for="includeMediaBackup">
+              <input id="includeMediaBackup" type="checkbox">
+              Include original media
+            </label>
+            <button id="backupBtn" class="mini primary" type="button" disabled>Back up now</button>
+            <span id="backupFolderLabel" class="library-folder">No backup folder selected</span>
+          </div>
+          <div id="restorePanel" class="maintenance-panel" hidden>
+            <button id="chooseRestoreFolderBtn" class="mini" type="button">Choose restore folder</button>
+            <button id="restoreBtn" class="mini primary" type="button" disabled>Restore</button>
+            <span id="restoreFolderLabel" class="library-folder">No restore folder selected</span>
+          </div>
+          <div class="backup-feedback">
+            <p id="backupStatus" class="backup-status">Choose Backup or Restore when you need to protect or recover the local library.</p>
+            <button id="backupWarningsToggle" class="warning-link" type="button" hidden aria-expanded="false" aria-controls="backupWarningsPanel">View warnings</button>
+            <div id="backupWarningsPanel" class="backup-warnings" hidden>
+              <ul id="backupWarningsList"></ul>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -199,6 +229,10 @@
       <figure class="lightbox-frame">
         <img id="lightboxImage" alt="">
         <video id="lightboxVideo" controls playsinline></video>
+        <div id="lightboxUnavailable" class="media-unavailable" hidden>
+          <strong>Media unavailable</strong>
+          <span>The file could not be opened from its saved path.</span>
+        </div>
         <figcaption>
           <strong id="lightboxName"></strong>
           <span id="lightboxMeta"></span>

@@ -138,18 +138,18 @@ def scan_folder(folder: Path, scan_mode: str = "photos", album_name: str = "", s
 
 
 def rescan_photo(file_id: str, reset_ignored: bool = False) -> dict:
-    path = Path(file_id)
-    if not path.exists() or not path.is_file():
-        raise ValueError("File does not exist.")
-
     warnings = []
     auto_tagged = 0
-    signature = file_signature(path)
     logger.info("Rescanning file=%s reset_ignored=%s", file_id, reset_ignored)
 
     with database.connection() as conn:
-        if not database.find_file(conn, file_id):
+        indexed_file = database.find_file(conn, file_id)
+        if not indexed_file:
             raise ValueError("File is not indexed.")
+        path = Path(indexed_file["path"])
+        if not path.exists() or not path.is_file():
+            raise ValueError("File does not exist.")
+        signature = file_signature(path)
 
         with conn:
             if reset_ignored:
@@ -173,7 +173,7 @@ def rescan_photo(file_id: str, reset_ignored: bool = False) -> dict:
             record = {
                 "id": file_id,
                 "name": path.name,
-                "path": file_id,
+                "path": str(path),
                 "type": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
                 "signature": signature,
                 "width": analysis["width"],

@@ -127,6 +127,7 @@ GPT-5.6 is planned as a future optional layer for richer query understanding. Th
 - [Configuration](docs/configuration.md)
 - [Architecture and local data](docs/architecture.md)
 - [Video scanning](docs/video-scanning.md)
+- [Backup and restore](docs/backup-restore.md)
 - [Desktop packaging](docs/desktop-packaging.md)
 - [API testing with Postman](docs/api-testing.md)
 - [Roadmap](docs/roadmap.md)

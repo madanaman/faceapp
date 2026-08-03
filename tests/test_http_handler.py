@@ -15,6 +15,15 @@ class HttpHandlerContractTest(unittest.TestCase):
         self.assertIn('parsed.path == "/api/search/parse"', source)
         self.assertIn("parse_search_query", source)
 
+    def test_backup_restore_endpoints_are_available(self):
+        source = (ROOT / "backend" / "http_handler.py").read_text()
+        self.assertIn('parsed.path == "/api/backup"', source)
+        self.assertIn('parsed.path == "/api/restore/validate"', source)
+        self.assertIn('parsed.path == "/api/restore"', source)
+        self.assertIn("create_backup", source)
+        self.assertIn("validate_restore_source", source)
+        self.assertIn("restore_backup", source)
+
 
 if __name__ == "__main__":
     unittest.main()

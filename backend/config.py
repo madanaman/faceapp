@@ -27,6 +27,7 @@ DB_PATH = APP_DATA_DIR / "face_index.sqlite3"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".heic", ".heif"}
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".avi", ".webm"}
 THUMBNAIL_DIR = APP_DATA_DIR / ".thumbnails"
+RESTORED_MEDIA_DIR = APP_DATA_DIR / "restored-media"
 LOG_DIR = APP_DATA_DIR / "logs"
 LOG_FILE = LOG_DIR / "faceapp.log"
 

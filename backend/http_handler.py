@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import database
+from .backup import create_backup, restore_backup, validate_restore_source
 from .config import STATIC_ROOT
 from .detector import health_payload
 from .geocoding import location_from_payload, resolve_missing_photo_locations, suggest_locations
@@ -125,6 +126,15 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
             return
         if parsed.path == "/api/locations/resolve":
             self.handle_resolve_locations()
+            return
+        if parsed.path == "/api/backup":
+            self.handle_backup()
+            return
+        if parsed.path == "/api/restore/validate":
+            self.handle_restore_validate()
+            return
+        if parsed.path == "/api/restore":
+            self.handle_restore()
             return
         if parsed.path == "/api/ignore-face":
             self.handle_ignore_face()
@@ -280,6 +290,46 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
                 )
         except Exception as exc:
             logger.exception("Location resolution failed")
+            self.send_json({"ok": False, "error": str(exc)}, status=400)
+
+    def handle_backup(self) -> None:
+        payload = self.read_json()
+        try:
+            result = create_backup(
+                Path(payload.get("path", "")),
+                include_media=bool(payload.get("includeMedia")),
+            )
+            self.send_json({"ok": True, **result})
+        except Exception as exc:
+            logger.exception("Backup failed")
+            self.send_json({"ok": False, "error": str(exc)}, status=400)
+
+    def handle_restore_validate(self) -> None:
+        payload = self.read_json()
+        try:
+            validation = validate_restore_source(Path(payload.get("path", "")))
+            status = 200 if validation["valid"] else 400
+            self.send_json({"ok": validation["valid"], **validation}, status=status)
+        except Exception as exc:
+            logger.exception("Restore validation failed")
+            self.send_json({"ok": False, "valid": False, "error": str(exc)}, status=400)
+
+    def handle_restore(self) -> None:
+        payload = self.read_json()
+        try:
+            result = restore_backup(Path(payload.get("path", "")))
+            with database.connection() as conn:
+                self.send_json(
+                    {
+                        "ok": True,
+                        **result,
+                        "albums": database.list_albums(conn),
+                        "tags": database.list_tags(conn),
+                        "locations": database.list_places(conn),
+                    }
+                )
+        except Exception as exc:
+            logger.exception("Restore failed")
             self.send_json({"ok": False, "error": str(exc)}, status=400)
 
     def run_mutation(self, mutation) -> None:

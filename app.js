@@ -35,6 +35,9 @@ const state = {
   lightboxIndex: 0,
   currentView: { type: "all", title: "All Indexed Files", hint: "Separate people, albums, and photo tags with commas. All terms must match.", terms: [] },
   activities: [],
+  backupPath: "",
+  restorePath: "",
+  restoreValidation: null,
   objectUrls: new Map(),
   backendBaseUrl: "",
   support: {
@@ -75,6 +78,21 @@ const els = {
   createAlbumBtn: document.querySelector("#createAlbumBtn"),
   albumList: document.querySelector("#albumList"),
   photoTagList: document.querySelector("#photoTagList"),
+  libraryBackupMode: document.querySelector("#libraryBackupMode"),
+  libraryRestoreMode: document.querySelector("#libraryRestoreMode"),
+  backupPanel: document.querySelector("#backupPanel"),
+  restorePanel: document.querySelector("#restorePanel"),
+  chooseBackupFolderBtn: document.querySelector("#chooseBackupFolderBtn"),
+  backupFolderLabel: document.querySelector("#backupFolderLabel"),
+  includeMediaBackup: document.querySelector("#includeMediaBackup"),
+  backupBtn: document.querySelector("#backupBtn"),
+  chooseRestoreFolderBtn: document.querySelector("#chooseRestoreFolderBtn"),
+  restoreFolderLabel: document.querySelector("#restoreFolderLabel"),
+  restoreBtn: document.querySelector("#restoreBtn"),
+  backupStatus: document.querySelector("#backupStatus"),
+  backupWarningsToggle: document.querySelector("#backupWarningsToggle"),
+  backupWarningsPanel: document.querySelector("#backupWarningsPanel"),
+  backupWarningsList: document.querySelector("#backupWarningsList"),
   activityToggle: document.querySelector("#activityToggle"),
   activityPanel: document.querySelector("#activityPanel"),
   activityClose: document.querySelector("#activityClose"),
@@ -94,6 +112,7 @@ const els = {
   lightbox: document.querySelector("#lightbox"),
   lightboxImage: document.querySelector("#lightboxImage"),
   lightboxVideo: document.querySelector("#lightboxVideo"),
+  lightboxUnavailable: document.querySelector("#lightboxUnavailable"),
   lightboxName: document.querySelector("#lightboxName"),
   lightboxMeta: document.querySelector("#lightboxMeta"),
   lightboxClose: document.querySelector("#lightboxClose"),
@@ -160,6 +179,13 @@ function bindEvents() {
   els.locationToggle.addEventListener("click", toggleLocationPanel);
   els.locationClose.addEventListener("click", () => setLocationPanel(false));
   els.resolveLocationsBtn.addEventListener("click", resolveLocations);
+  els.libraryBackupMode.addEventListener("click", () => toggleLibraryToolMode("backup"));
+  els.libraryRestoreMode.addEventListener("click", () => toggleLibraryToolMode("restore"));
+  els.chooseBackupFolderBtn.addEventListener("click", chooseBackupFolder);
+  els.chooseRestoreFolderBtn.addEventListener("click", chooseRestoreFolder);
+  els.backupBtn.addEventListener("click", createLibraryBackup);
+  els.restoreBtn.addEventListener("click", restoreLibraryBackup);
+  els.backupWarningsToggle.addEventListener("click", toggleBackupWarnings);
   els.activityToggle.addEventListener("click", toggleActivityPanel);
   els.activityClose.addEventListener("click", () => setActivityPanel(false));
   document.addEventListener("click", handleActivityOutsideClick);
@@ -196,6 +222,67 @@ async function pickFolder(invoke) {
   const payload = await response.json();
   if (!payload.ok) throw new Error(payload.error || "Could not open folder picker.");
   return payload.path || "";
+}
+
+async function chooseBackupFolder() {
+  setLibraryToolMode("backup");
+  try {
+    const path = await pickFolder(desktopInvoke());
+    if (!path) return;
+    state.backupPath = path;
+    els.backupBtn.disabled = false;
+    els.backupFolderLabel.textContent = displayFolderName(path);
+    els.backupFolderLabel.title = path;
+    setBackupStatus(`Backup folder selected: ${displayFolderName(path)}.`);
+  } catch (error) {
+    setBackupStatus(error.message || "Could not choose backup folder.", true);
+    setProgress(error.message || "Could not choose backup folder.", 0);
+  }
+}
+
+async function chooseRestoreFolder() {
+  setLibraryToolMode("restore");
+  try {
+    const path = await pickFolder(desktopInvoke());
+    if (!path) return;
+    state.restorePath = path;
+    state.restoreValidation = null;
+    els.restoreBtn.disabled = true;
+    els.restoreFolderLabel.textContent = displayFolderName(path);
+    els.restoreFolderLabel.title = path;
+    await validateLibraryRestore();
+  } catch (error) {
+    setBackupStatus(error.message || "Could not choose restore folder.", true);
+    setProgress(error.message || "Could not choose restore folder.", 0);
+  }
+}
+
+function toggleLibraryToolMode(mode) {
+  const currentMode = els.backupPanel.hidden ? (els.restorePanel.hidden ? "" : "restore") : "backup";
+  setLibraryToolMode(currentMode === mode ? "" : mode);
+}
+
+function setLibraryToolMode(mode) {
+  const backupOpen = mode === "backup";
+  const restoreOpen = mode === "restore";
+  els.backupPanel.hidden = !backupOpen;
+  els.restorePanel.hidden = !restoreOpen;
+  els.libraryBackupMode.classList.toggle("active", backupOpen);
+  els.libraryRestoreMode.classList.toggle("active", restoreOpen);
+  els.libraryBackupMode.setAttribute("aria-expanded", String(backupOpen));
+  els.libraryRestoreMode.setAttribute("aria-expanded", String(restoreOpen));
+  if (backupOpen && !state.backupPath) {
+    setBackupStatus("Choose a backup folder. The local index and thumbnails are always included.");
+    setBackupWarnings([]);
+  }
+  if (restoreOpen && !state.restorePath) {
+    setBackupStatus("Choose a restore folder. The app will validate it before enabling restore.");
+    setBackupWarnings([]);
+  }
+  if (!backupOpen && !restoreOpen) {
+    setBackupStatus("Choose Backup or Restore when you need to protect or recover the local library.");
+    setBackupWarnings([]);
+  }
 }
 
 function setupGalleryPaging() {
@@ -490,7 +577,7 @@ function renderPhoto(fileRecord) {
   }
   mediaWrap.style.aspectRatio = `${fileRecord.width || 4} / ${fileRecord.height || 3}`;
 
-  const media = createMediaElement(fileRecord);
+  const media = createMediaElement(fileRecord, () => showMediaUnavailable(mediaWrap, fileRecord));
   mediaWrap.append(media);
   mediaWrap.addEventListener("click", () => openLightbox(fileRecord.id));
 
@@ -684,10 +771,13 @@ function renderLightbox() {
   const isVideo = VIDEO_TYPES.has(fileRecord.type);
   els.lightboxImage.style.display = isVideo ? "none" : "block";
   els.lightboxVideo.style.display = isVideo ? "block" : "none";
+  els.lightboxUnavailable.hidden = true;
   if (isVideo) {
+    els.lightboxVideo.onerror = () => showLightboxMediaUnavailable(fileRecord);
     els.lightboxVideo.src = getObjectUrl(fileRecord);
     els.lightboxImage.removeAttribute("src");
   } else {
+    els.lightboxImage.onerror = () => showLightboxMediaUnavailable(fileRecord);
     els.lightboxImage.src = getObjectUrl(fileRecord);
     els.lightboxImage.alt = fileRecord.name;
     els.lightboxVideo.pause();
@@ -705,20 +795,48 @@ function handleLightboxKeys(event) {
   if (event.key === "ArrowLeft") stepLightbox(-1);
   if (event.key === "ArrowRight") stepLightbox(1);
 }
-function createMediaElement(fileRecord) {
+function createMediaElement(fileRecord, onUnavailable = () => {}) {
   const url = getObjectUrl(fileRecord);
   if (VIDEO_TYPES.has(fileRecord.type)) {
     const video = document.createElement("video");
     video.src = url;
     video.controls = true;
     video.preload = "metadata";
+    video.addEventListener("error", onUnavailable, { once: true });
     return video;
   }
 
   const img = document.createElement("img");
   img.src = url;
   img.alt = fileRecord.name;
+  img.addEventListener("error", onUnavailable, { once: true });
   return img;
+}
+
+function showMediaUnavailable(container, fileRecord) {
+  const placeholder = document.createElement("div");
+  placeholder.className = "media-unavailable";
+  const title = document.createElement("strong");
+  title.textContent = "Media unavailable";
+  const detail = document.createElement("span");
+  detail.textContent = displayFileLocation(fileRecord.path);
+  detail.title = fileRecord.path;
+  placeholder.append(title, detail);
+  container.classList.add("unavailable");
+  container.replaceChildren(placeholder);
+}
+
+function showLightboxMediaUnavailable(fileRecord) {
+  if (state.filteredIds[state.lightboxIndex] !== fileRecord.id) return;
+  els.lightboxImage.style.display = "none";
+  els.lightboxVideo.style.display = "none";
+  els.lightboxVideo.pause();
+  els.lightboxUnavailable.hidden = false;
+  const detail = els.lightboxUnavailable.querySelector("span");
+  if (detail) {
+    detail.textContent = displayFileLocation(fileRecord.path);
+    detail.title = fileRecord.path;
+  }
 }
 
 function getObjectUrl(fileRecord) {
@@ -1769,6 +1887,169 @@ async function resolveLocations() {
     els.resolveLocationsBtn.disabled = false;
     setBusy(false);
   }
+}
+
+async function createLibraryBackup() {
+  const path = state.backupPath;
+  if (!path) {
+    setBackupStatus("Choose a backup folder first.", true);
+    return;
+  }
+  const includeMedia = els.includeMediaBackup.checked;
+  const activityId = startActivity(includeMedia ? "Full backup" : "Metadata backup", displayFolderName(path));
+  els.backupBtn.disabled = true;
+  try {
+    setBusy(true, "Creating backup...");
+    const payload = await postLibraryMutation("/api/backup", { path, includeMedia });
+    const manifest = payload.manifest || {};
+    const counts = manifest.counts || {};
+    const backupWarnings = payload.warnings || [];
+    const warnings = backupWarnings.length ? ` ${backupWarnings.length} warning${backupWarnings.length === 1 ? "" : "s"}.` : "";
+    setBackupStatus(`Backup complete: ${counts.photos || 0} files, ${counts.mediaCopied || 0} media copied.${warnings}`);
+    setBackupWarnings(backupWarnings);
+    setProgress(`Backup complete at ${displayFolderName(payload.path || path)}.`, 100);
+    finishActivity(activityId, "done", `${manifest.mode || "backup"} backup`);
+  } catch (error) {
+    setBackupStatus(error.message, true);
+    setBackupWarnings([error.message]);
+    setProgress(error.message, 0);
+    finishActivity(activityId, "failed", error.message);
+  } finally {
+    els.backupBtn.disabled = false;
+    setBusy(false);
+  }
+}
+
+async function validateLibraryRestore() {
+  const path = state.restorePath;
+  if (!path) {
+    setBackupStatus("Choose a restore folder first.", true);
+    return null;
+  }
+  const activityId = startActivity("Validate restore", displayFolderName(path));
+  els.chooseRestoreFolderBtn.disabled = true;
+  els.restoreBtn.disabled = true;
+  try {
+    setBusy(true, "Validating backup...");
+    const response = await fetch(apiUrl("/api/restore/validate"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+    const payload = await response.json();
+    const errors = payload.errors || [];
+    const warnings = payload.warnings || [];
+    if (!payload.valid) {
+      throw new Error(errors.join(" ") || payload.error || "Backup is not valid.");
+    }
+    state.restoreValidation = payload;
+    els.restoreBtn.disabled = false;
+    setBackupStatus(describeRestoreValidation(payload));
+    setBackupWarnings(warnings);
+    finishActivity(activityId, "done", `${payload.mode || "valid"} backup`);
+    return payload;
+  } catch (error) {
+    state.restoreValidation = null;
+    setBackupStatus(error.message, true);
+    setBackupWarnings([error.message]);
+    setProgress(error.message, 0);
+    finishActivity(activityId, "failed", error.message);
+    return null;
+  } finally {
+    els.chooseRestoreFolderBtn.disabled = false;
+    setBusy(false);
+  }
+}
+
+async function restoreLibraryBackup() {
+  const path = state.restorePath;
+  if (!path) {
+    setBackupStatus("Choose a restore folder first.", true);
+    return;
+  }
+  const validation = state.restoreValidation || await validateLibraryRestore();
+  if (!validation?.valid) return;
+  const warningCount = validation.warnings?.length || 0;
+  const restorePrompt = warningCount
+    ? `This backup has ${warningCount} warning${warningCount === 1 ? "" : "s"}. Review warning details in Backup & Restore. Restore will recover metadata, thumbnails, and available media, but missing media may not open. Continue?`
+    : "Restore this backup? This replaces the current local index after creating a safety copy.";
+  if (!confirm(restorePrompt)) {
+    return;
+  }
+  const activityId = startActivity("Restore backup", displayFolderName(path));
+  els.restoreBtn.disabled = true;
+  try {
+    setBusy(true, "Restoring backup...");
+    const payload = await postLibraryMutation("/api/restore", { path });
+    syncLibraryPayload(payload);
+    showAll();
+    const mediaText = payload.restoredMediaCount ? ` ${payload.restoredMediaCount} media files restored.` : "";
+    const skippedText = payload.skippedMediaCount ? ` ${payload.skippedMediaCount} media files skipped.` : "";
+    const warningText = payload.validation?.warnings?.length
+      ? ` ${payload.validation.warnings.length} warning${payload.validation.warnings.length === 1 ? "" : "s"}.`
+      : "";
+    setBackupStatus(`Restore complete.${mediaText}${skippedText}${warningText}`);
+    setBackupWarnings(payload.validation?.warnings || []);
+    setProgress("Backup restored.", 100);
+    finishActivity(activityId, "done", `${payload.files?.length || 0} files restored`);
+  } catch (error) {
+    setBackupStatus(error.message, true);
+    setProgress(error.message, 0);
+    finishActivity(activityId, "failed", error.message);
+  } finally {
+    els.restoreBtn.disabled = false;
+    setBusy(false);
+  }
+}
+
+function setBackupStatus(message, isError = false) {
+  els.backupStatus.textContent = message;
+  els.backupStatus.classList.toggle("error", isError);
+}
+
+function setBackupWarnings(warnings = []) {
+  const visibleWarnings = warnings.filter(Boolean);
+  els.backupWarningsList.replaceChildren(
+    ...visibleWarnings.map((warning) => {
+      const item = document.createElement("li");
+      item.textContent = warning;
+      return item;
+    }),
+  );
+  els.backupWarningsToggle.hidden = !visibleWarnings.length;
+  els.backupWarningsToggle.textContent = visibleWarnings.length
+    ? `View warnings (${visibleWarnings.length})`
+    : "View warnings";
+  if (!visibleWarnings.length) {
+    setBackupWarningsPanel(false);
+  }
+}
+
+function toggleBackupWarnings() {
+  setBackupWarningsPanel(els.backupWarningsPanel.hidden);
+}
+
+function setBackupWarningsPanel(isOpen) {
+  els.backupWarningsPanel.hidden = !isOpen;
+  els.backupWarningsToggle.setAttribute("aria-expanded", String(isOpen));
+  if (!els.backupWarningsToggle.hidden) {
+    const count = els.backupWarningsList.children.length;
+    els.backupWarningsToggle.textContent = `${isOpen ? "Hide" : "View"} warnings (${count})`;
+  }
+}
+
+function describeRestoreValidation(payload) {
+  const manifest = payload.manifest || {};
+  const counts = manifest.counts || {};
+  const created = manifest.createdAt ? new Date(manifest.createdAt).toLocaleString() : "";
+  const mode = payload.mode || manifest.mode || "unknown";
+  const mediaText = mode === "full"
+    ? `, ${counts.mediaCopied || 0} media files`
+    : "";
+  const warningText = payload.warnings?.length
+    ? ` ${payload.warnings.length} warning${payload.warnings.length === 1 ? "" : "s"}.`
+    : "";
+  return `Valid ${mode} backup${created ? ` from ${created}` : ""}: ${counts.photos || 0} files, ${counts.faces || 0} faces${mediaText}.${warningText}`;
 }
 
 async function postLibraryMutation(path, body) {

@@ -12,6 +12,7 @@ Useful collection variables:
 - `albumId`, `albumName`: sample album values
 - `photoTagId`, `photoTagName`: sample descriptive photo-tag values
 - `locationLabel`, `locationCity`, `locationRegion`, `locationCountry`: sample manual or scan-time location values
+- `backupPath`: folder path for backup/restore tests
 
 Metadata API examples:
 
@@ -38,3 +39,13 @@ DELETE /api/photos/location
 ```
 
 Year queries use `photo_metadata.taken_at`. Place queries use `photo_places.city`, `photo_places.region`, and `photo_places.country`. GPS-only photos become searchable by place name after `POST /api/locations/resolve` fills those fields, or after you add a scan-time/manual location.
+
+Backup and restore API examples:
+
+```text
+POST /api/backup
+POST /api/restore/validate
+POST /api/restore
+```
+
+`POST /api/backup` accepts `path` and `includeMedia`. Metadata backups copy the local index and thumbnails. Full backups also copy original media into `media/by-id/` and record per-media mappings/checksums in `media-index.jsonl`; `manifest.json` stores the media index pointer and checksum.

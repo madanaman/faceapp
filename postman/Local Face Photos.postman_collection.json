@@ -104,6 +104,10 @@
       "key": "searchCountry",
       "value": "Canada",
       "type": "string"
+    },
+    {
+      "key": "backupPath",
+      "value": "/tmp/local-face-photos-backup"
     }
   ],
   "item": [
@@ -946,6 +950,116 @@
               ]
             },
             "description": "Clears ignored faces for one indexed file and rescans it."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Backup and Restore",
+      "item": [
+        {
+          "name": "Create Metadata Backup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/backup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "backup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{backupPath}}\",\n  \"includeMedia\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Full Backup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/backup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "backup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{backupPath}}\",\n  \"includeMedia\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Validate Restore",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/restore/validate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "restore",
+                "validate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{backupPath}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Restore Backup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "restore"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{backupPath}}\"\n}"
+            }
           }
         }
       ]
