@@ -19,7 +19,7 @@ The current public build is available from the GitHub release page:
 
 Important beta notes:
 
-- The Apple Silicon DMG is the currently tested desktop build.
+- The Apple Silicon DMG is the currently tested desktop build. Intel Mac builds are experimental until community-tested.
 - The app is unsigned and not notarized yet. On macOS, you may need to right-click the app and choose **Open** the first time.
 - First launch can take a minute while the local face engine starts.
 - Large video scans can be slow, especially on CPU fallback.
