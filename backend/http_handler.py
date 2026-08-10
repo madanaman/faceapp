@@ -13,6 +13,7 @@ from . import database
 from .config import STATIC_ROOT
 from .detector import health_payload
 from .scanner import rescan_photo, scan_folder
+from .search_parser import parse_search_query
 from .tagging import tag_face
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,11 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/photo-tags":
             with database.connection() as conn:
                 self.send_json(database.list_tags(conn))
+            return
+        if parsed.path == "/api/search/parse":
+            params = parse_qs(parsed.query)
+            with database.connection() as conn:
+                self.send_json(parse_search_query(conn, single_param(params, "q") or ""))
             return
         if parsed.path == "/api/search":
             params = parse_qs(parsed.query)

@@ -328,6 +328,27 @@ def list_albums(conn: sqlite3.Connection) -> list[dict]:
     ]
 
 
+def list_people(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        """
+        select p.*, count(distinct f.photo_id) as photo_count
+        from people p
+        left join face_people fp on fp.person_id = p.id
+        left join faces f on f.id = fp.face_id
+        group by p.id
+        order by lower(p.name)
+        """
+    ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "photoCount": row["photo_count"],
+        }
+        for row in rows
+    ]
+
+
 def create_album(conn: sqlite3.Connection, name: str, description: str = "") -> dict:
     clean_name = name.strip()
     if not clean_name:

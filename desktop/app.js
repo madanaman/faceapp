@@ -5,6 +5,20 @@ const GALLERY_BATCH_SIZE = 50;
 const ACTIVITY_LIMIT = 10;
 const MIN_VIDEO_FACE_APPEARANCES = 2;
 const VIDEO_TYPES = new Set(["video/mp4", "video/webm", "video/quicktime", "video/x-m4v", "video/x-msvideo"]);
+const MONTH_LABELS = {
+  "01": "January",
+  "02": "February",
+  "03": "March",
+  "04": "April",
+  "05": "May",
+  "06": "June",
+  "07": "July",
+  "08": "August",
+  "09": "September",
+  "10": "October",
+  "11": "November",
+  "12": "December",
+};
 
 const state = {
   db: null,
@@ -390,7 +404,7 @@ function renderCurrentView({ preserveScroll = false } = {}) {
   if (state.currentView.type === "untagged") {
     showUntagged();
   } else if (state.currentView.type === "search") {
-    search();
+    applyGalleryFilters();
   } else {
     applyGalleryFilters();
   }
@@ -868,17 +882,100 @@ function formatTimestamp(seconds) {
   return `${minutes}:${String(remaining).padStart(2, "0")}`;
 }
 
-function search() {
-  const terms = parseSearch(els.searchInput.value);
+async function search() {
+  const rawQuery = els.searchInput.value.trim();
+  const parsed = await parseNaturalSearch(rawQuery);
+  const displayTerms = parsed ? parsed.terms || [] : parseSearch(rawQuery);
+  const terms = displayTerms.map(normalizeName).filter(Boolean);
+  const hasCriteria = Boolean(parsed?.hasInterpretation || terms.length);
+
+  if (parsed) {
+    resetSearchFilters();
+    applyParsedSearchFilters(parsed);
+  }
+
+  const summary = parsed ? naturalSearchSummary(parsed, displayTerms) : displayTerms.join(" + ");
   state.currentView = {
-    type: terms.length ? "search" : "all",
-    title: terms.length ? `Search: ${terms.join(" + ")}` : "All Indexed Files",
-    hint: terms.length
-      ? "Every person, album, or photo tag must match the same file."
+    type: hasCriteria ? "search" : "all",
+    title: hasCriteria ? `Search: ${summary}` : "All Indexed Files",
+    hint: hasCriteria
+      ? parsed
+        ? `Interpreted as: ${summary}. You can still adjust filters below.`
+        : "Every person, album, or photo tag must match the same file."
       : "Separate people, albums, and photo tags with commas. All terms must match.",
     terms,
   };
   applyGalleryFilters();
+}
+
+function resetSearchFilters() {
+  els.mediaFilter.value = "both";
+  els.yearFilter.value = "";
+  els.monthFilter.value = "";
+  els.dateFilter.value = "";
+}
+
+async function parseNaturalSearch(query) {
+  if (!query || !state.support.backend) return null;
+  try {
+    const response = await fetch(apiUrl(`/api/search/parse?q=${encodeURIComponent(query)}`));
+    if (!response.ok) return null;
+    const payload = await response.json();
+    return payload.hasInterpretation ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+function applyParsedSearchFilters(parsed) {
+  if (parsed.mediaType) {
+    els.mediaFilter.value = parsed.mediaType;
+  }
+  if (parsed.date) {
+    els.dateFilter.value = parsed.date;
+  } else {
+    els.dateFilter.value = "";
+    if (parsed.year) {
+      ensureYearFilterOption(parsed.year);
+      els.yearFilter.value = parsed.year;
+    }
+    if (parsed.month) {
+      els.monthFilter.value = parsed.month;
+    }
+  }
+}
+
+function ensureYearFilterOption(year) {
+  if (!year || [...els.yearFilter.options].some((option) => option.value === year)) return;
+  els.yearFilter.append(new Option(year, year));
+}
+
+function naturalSearchSummary(parsed, displayTerms) {
+  const parts = [];
+  if (displayTerms.length) {
+    parts.push(displayTerms.join(" + "));
+  }
+  if (parsed.mediaType) {
+    parts.push(mediaTypeLabel(parsed.mediaType));
+  }
+  const dateSummary = parsedDateSummary(parsed);
+  if (dateSummary) {
+    parts.push(dateSummary);
+  }
+  return parts.join(" · ") || parsed.query || "matches";
+}
+
+function mediaTypeLabel(mediaType) {
+  if (mediaType === "photos") return "Photos";
+  if (mediaType === "videos") return "Videos";
+  return "Photos and videos";
+}
+
+function parsedDateSummary(parsed) {
+  if (parsed.date) return parsed.date;
+  if (parsed.month && parsed.year) return `${MONTH_LABELS[parsed.month] || parsed.month} ${parsed.year}`;
+  if (parsed.month) return MONTH_LABELS[parsed.month] || parsed.month;
+  return parsed.year || "";
 }
 
 function applyGalleryFilters() {

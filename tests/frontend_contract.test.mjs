@@ -23,6 +23,15 @@ test("person search keeps spaces inside names and uses commas for multiple names
   assert.doesNotMatch(appJs, /split\(\s*\/\\s\+/);
 });
 
+test("library search can use backend natural-language parsing with comma fallback", () => {
+  assert.match(appJs, /async function search\(/);
+  assert.match(appJs, /function parseNaturalSearch\(/);
+  assert.match(appJs, /\/api\/search\/parse\?q=/);
+  assert.match(appJs, /function applyParsedSearchFilters\(/);
+  assert.match(appJs, /Interpreted as:/);
+  assert.match(appJs, /const displayTerms = parsed \? parsed\.terms \|\| \[\] : parseSearch\(rawQuery\)/);
+});
+
 test("people search excludes records with no matching tagged faces at search and render time", () => {
   assert.match(appJs, /function matchesPeople\(/);
   assert.match(appJs, /function matchesCurrentGalleryFilters\(fileRecord\)/);
