@@ -13,20 +13,19 @@
         <h1>Face Library</h1>
       </div>
       <div class="actions">
-        <button id="clearDbBtn" class="ghost">Clear Index</button>
+        <button id="clearDbBtn" class="ghost" type="button">Clear Index</button>
       </div>
     </header>
 
     <main>
       <section class="control-band">
-      <div class="folder-state">
+        <div class="folder-state">
           <span id="supportBadge" class="badge">Checking local engine</span>
-          <span id="folderLabel">No folder selected</span>
+          <span id="folderLabel">Choose a folder to start</span>
         </div>
         <div class="path-row">
-          <label for="pathInput">Folder</label>
-          <input id="pathInput" type="text" placeholder="/Users/you/Pictures/Photo Library">
-          <button id="pickFolderBtn" class="ghost" type="button" hidden>Choose Folder</button>
+          <input id="pathInput" type="hidden">
+          <button id="pickFolderBtn" class="primary" type="button" hidden>Choose Folder</button>
           <label class="scan-label" for="scanMode">
             Scan
             <select id="scanMode">
@@ -39,13 +38,65 @@
             Album
             <input id="scanAlbumInput" type="text" placeholder="Optional album" list="albumSuggestions">
           </label>
-          <button id="scanPathBtn" class="primary">Scan Path</button>
+          <label class="scan-location-label" for="scanLocationInput">
+            Location
+            <input id="scanLocationInput" type="text" placeholder="Delhi, India" list="locationSuggestions">
+          </label>
+          <button id="scanPathBtn" class="primary">Scan</button>
         </div>
         <div class="search-row">
           <label for="searchInput">Search library</label>
           <input id="searchInput" type="search" placeholder="Aman, Ironman Malaysia or photos of Aman from 2022">
           <button id="searchBtn">Search</button>
+          <button id="locationToggle" class="icon-button" type="button" aria-label="Browse locations" aria-expanded="false" aria-controls="locationPanel" title="Browse locations">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"></circle>
+              <path d="M3 12h18"></path>
+              <path d="M12 3a14 14 0 0 1 0 18"></path>
+              <path d="M12 3a14 14 0 0 0 0 18"></path>
+            </svg>
+          </button>
+          <div id="locationPanel" class="location-panel" hidden>
+            <div class="location-head">
+              <strong>Locations</strong>
+              <div>
+                <button id="resolveLocationsBtn" class="mini" type="button">Name GPS places</button>
+                <button id="locationClose" class="mini ghost" type="button">Close</button>
+              </div>
+            </div>
+            <div id="locationList" class="location-list"></div>
+          </div>
           <button id="showAllBtn" class="ghost">Show All</button>
+        </div>
+        <div class="library-maintenance" aria-label="Backup and restore">
+          <div class="maintenance-head">
+            <strong>Backup &amp; Restore</strong>
+            <div class="maintenance-actions">
+              <button id="libraryBackupMode" class="mini ghost" type="button" aria-expanded="false" aria-controls="backupPanel">Backup</button>
+              <button id="libraryRestoreMode" class="mini ghost" type="button" aria-expanded="false" aria-controls="restorePanel">Restore</button>
+            </div>
+          </div>
+          <div id="backupPanel" class="maintenance-panel" hidden>
+            <button id="chooseBackupFolderBtn" class="mini" type="button">Choose backup folder</button>
+            <label class="library-check" for="includeMediaBackup">
+              <input id="includeMediaBackup" type="checkbox">
+              Include original media
+            </label>
+            <button id="backupBtn" class="mini primary" type="button" disabled>Back up now</button>
+            <span id="backupFolderLabel" class="library-folder">No backup folder selected</span>
+          </div>
+          <div id="restorePanel" class="maintenance-panel" hidden>
+            <button id="chooseRestoreFolderBtn" class="mini" type="button">Choose restore folder</button>
+            <button id="restoreBtn" class="mini primary" type="button" disabled>Restore</button>
+            <span id="restoreFolderLabel" class="library-folder">No restore folder selected</span>
+          </div>
+          <div class="backup-feedback">
+            <p id="backupStatus" class="backup-status">Choose Backup or Restore when you need to protect or recover the local library.</p>
+            <button id="backupWarningsToggle" class="warning-link" type="button" hidden aria-expanded="false" aria-controls="backupWarningsPanel">View warnings</button>
+            <div id="backupWarningsPanel" class="backup-warnings" hidden>
+              <ul id="backupWarningsList"></ul>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -178,6 +229,10 @@
       <figure class="lightbox-frame">
         <img id="lightboxImage" alt="">
         <video id="lightboxVideo" controls playsinline></video>
+        <div id="lightboxUnavailable" class="media-unavailable" hidden>
+          <strong>Media unavailable</strong>
+          <span>The file could not be opened from its saved path.</span>
+        </div>
         <figcaption>
           <strong id="lightboxName"></strong>
           <span id="lightboxMeta"></span>
@@ -199,6 +254,19 @@
         <div class="photo-meta">
           <strong class="file-name"></strong>
           <span class="file-path"></span>
+          <div class="photo-badges"></div>
+          <span class="face-summary"></span>
+        </div>
+        <details class="card-section faces-section">
+          <summary>Faces</summary>
+          <div class="bulk-face-actions" hidden>
+            <span class="bulk-face-count">0 selected</span>
+            <button class="bulk-remove-face" type="button">Remove selected</button>
+          </div>
+          <div class="faces"></div>
+        </details>
+        <details class="card-section organize-section">
+          <summary>Organize</summary>
           <div class="photo-actions">
             <button class="rescan-photo" type="button">Rescan faces</button>
             <button class="reset-ignored" type="button">Reset ignored</button>
@@ -212,13 +280,13 @@
               <input class="custom-tag-input" type="text" placeholder="Aman's first birthday">
               <button class="add-custom-tag mini" type="button">Add tag</button>
             </div>
+            <div class="location-editor">
+              <input class="location-input" type="text" placeholder="Delhi, India" list="locationSuggestions">
+              <button class="save-location mini" type="button">Save location</button>
+              <button class="remove-location mini ghost" type="button">Remove</button>
+            </div>
           </div>
-        </div>
-        <div class="bulk-face-actions" hidden>
-          <span class="bulk-face-count">0 selected</span>
-          <button class="bulk-remove-face" type="button">Remove selected</button>
-        </div>
-        <div class="faces"></div>
+        </details>
       </article>
     </template>
 
@@ -236,6 +304,7 @@
 
     <datalist id="personSuggestions"></datalist>
     <datalist id="albumSuggestions"></datalist>
+    <datalist id="locationSuggestions"></datalist>
 
     <script src="./app.js" type="module"></script>
   </body>

@@ -10,8 +10,10 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import database
+from .backup import create_backup, restore_backup, validate_restore_source
 from .config import STATIC_ROOT
 from .detector import health_payload
+from .geocoding import location_from_payload, resolve_missing_photo_locations, suggest_locations
 from .scanner import rescan_photo, scan_folder
 from .search_parser import parse_search_query
 from .tagging import tag_face
@@ -43,6 +45,15 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
             with database.connection() as conn:
                 self.send_json(database.list_tags(conn))
             return
+        if parsed.path == "/api/locations":
+            with database.connection() as conn:
+                self.send_json(database.list_places(conn))
+            return
+        if parsed.path == "/api/locations/suggest":
+            params = parse_qs(parsed.query)
+            with database.connection() as conn:
+                self.send_json(suggest_locations(conn, single_param(params, "q") or ""))
+            return
         if parsed.path == "/api/search/parse":
             params = parse_qs(parsed.query)
             with database.connection() as conn:
@@ -57,6 +68,9 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
                             conn,
                             year=single_param(params, "year"),
                             city=single_param(params, "city"),
+                            region=single_param(params, "region"),
+                            country=single_param(params, "country"),
+                            place=single_param(params, "place"),
                             album=single_param(params, "album"),
                             tag=single_param(params, "tag"),
                         )
@@ -107,6 +121,21 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/photos/tags":
             self.handle_add_photo_tag()
             return
+        if parsed.path == "/api/photos/location":
+            self.handle_set_photo_location()
+            return
+        if parsed.path == "/api/locations/resolve":
+            self.handle_resolve_locations()
+            return
+        if parsed.path == "/api/backup":
+            self.handle_backup()
+            return
+        if parsed.path == "/api/restore/validate":
+            self.handle_restore_validate()
+            return
+        if parsed.path == "/api/restore":
+            self.handle_restore()
+            return
         if parsed.path == "/api/ignore-face":
             self.handle_ignore_face()
             return
@@ -129,6 +158,9 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/photos/tags":
             self.handle_remove_photo_tag()
             return
+        if parsed.path == "/api/photos/location":
+            self.handle_remove_photo_location()
+            return
         self.send_error(404)
 
     def handle_scan(self) -> None:
@@ -140,10 +172,13 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
             payload.get("albumName", ""),
         )
         try:
+            with database.connection() as conn:
+                scan_location = location_from_payload(conn, payload.get("location") or {})
             result = scan_folder(
                 Path(payload.get("path", "")).expanduser(),
                 scan_mode=payload.get("scanMode", "photos"),
                 album_name=payload.get("albumName", ""),
+                scan_location=scan_location,
             )
             logger.info(
                 "Scan completed files=%s auto_tagged=%s warnings=%s",
@@ -215,6 +250,88 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
         payload = self.read_json()
         self.run_mutation(lambda conn: database.remove_photo_tag(conn, payload["fileId"], int(payload["tagId"])))
 
+    def handle_set_photo_location(self) -> None:
+        payload = self.read_json()
+        def mutation(conn):
+            location = location_from_payload(conn, payload)
+            database.set_photo_location(
+                conn,
+                payload["fileId"],
+                city=location.get("city", ""),
+                region=location.get("region", ""),
+                country=location.get("country", ""),
+                latitude=location.get("latitude"),
+                longitude=location.get("longitude"),
+                source="manual",
+            )
+
+        self.run_mutation(mutation)
+
+    def handle_remove_photo_location(self) -> None:
+        payload = self.read_json()
+        self.run_mutation(lambda conn: database.remove_photo_location(conn, payload["fileId"]))
+
+    def handle_resolve_locations(self) -> None:
+        try:
+            payload = self.read_json()
+            with database.connection() as conn:
+                with conn:
+                    result = resolve_missing_photo_locations(conn, limit=payload.get("limit"))
+                if result.get("error"):
+                    self.send_json({"ok": False, **result}, status=400)
+                    return
+                self.send_json(
+                    {
+                        "ok": True,
+                        **result,
+                        "files": database.list_files(conn),
+                        "locations": database.list_places(conn),
+                    }
+                )
+        except Exception as exc:
+            logger.exception("Location resolution failed")
+            self.send_json({"ok": False, "error": str(exc)}, status=400)
+
+    def handle_backup(self) -> None:
+        payload = self.read_json()
+        try:
+            result = create_backup(
+                Path(payload.get("path", "")),
+                include_media=bool(payload.get("includeMedia")),
+            )
+            self.send_json({"ok": True, **result})
+        except Exception as exc:
+            logger.exception("Backup failed")
+            self.send_json({"ok": False, "error": str(exc)}, status=400)
+
+    def handle_restore_validate(self) -> None:
+        payload = self.read_json()
+        try:
+            validation = validate_restore_source(Path(payload.get("path", "")))
+            status = 200 if validation["valid"] else 400
+            self.send_json({"ok": validation["valid"], **validation}, status=status)
+        except Exception as exc:
+            logger.exception("Restore validation failed")
+            self.send_json({"ok": False, "valid": False, "error": str(exc)}, status=400)
+
+    def handle_restore(self) -> None:
+        payload = self.read_json()
+        try:
+            result = restore_backup(Path(payload.get("path", "")))
+            with database.connection() as conn:
+                self.send_json(
+                    {
+                        "ok": True,
+                        **result,
+                        "albums": database.list_albums(conn),
+                        "tags": database.list_tags(conn),
+                        "locations": database.list_places(conn),
+                    }
+                )
+        except Exception as exc:
+            logger.exception("Restore failed")
+            self.send_json({"ok": False, "error": str(exc)}, status=400)
+
     def run_mutation(self, mutation) -> None:
         try:
             with database.connection() as conn:
@@ -226,6 +343,7 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
                         "files": database.list_files(conn),
                         "albums": database.list_albums(conn),
                         "tags": database.list_tags(conn),
+                        "locations": database.list_places(conn),
                     }
                 )
         except (KeyError, TypeError, ValueError) as exc:

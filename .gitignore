@@ -16,5 +16,7 @@ face_index.sqlite3-shm
 face_index.sqlite3-wal
 logs/
 .thumbnails/
+restored-media/
+restore-safety/
 .venv
 .idea

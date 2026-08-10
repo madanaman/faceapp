@@ -27,6 +27,7 @@ DB_PATH = APP_DATA_DIR / "face_index.sqlite3"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".heic", ".heif"}
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".avi", ".webm"}
 THUMBNAIL_DIR = APP_DATA_DIR / ".thumbnails"
+RESTORED_MEDIA_DIR = APP_DATA_DIR / "restored-media"
 LOG_DIR = APP_DATA_DIR / "logs"
 LOG_FILE = LOG_DIR / "faceapp.log"
 
@@ -42,6 +43,12 @@ DEFAULT_VIDEO_MIN_FACE_HEIGHT_RATIO = 0.04
 DEFAULT_VIDEO_CLUSTER_THRESHOLD = 0.42
 DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_LOG_RETENTION_DAYS = 3
+DEFAULT_LOCATION_CACHE_PRECISION = 3
+DEFAULT_LOCATION_REVERSE_GEOCODING_ENABLED = "1"
+DEFAULT_LOCATION_REVERSE_GEOCODER = "nominatim"
+DEFAULT_LOCATION_GEOCODER_THROTTLE_SECONDS = 1.1
+DEFAULT_LOCATION_RESOLVE_LIMIT = 50
+DEFAULT_LOCATION_SUGGEST_LIMIT = 6
 
 os.environ.setdefault("MPLCONFIGDIR", str(APP_DATA_DIR / ".cache" / "matplotlib"))
 os.environ.setdefault("NO_ALBUMENTATIONS_UPDATE", "1")
@@ -101,3 +108,43 @@ def log_level() -> str:
 
 def log_retention_days() -> int:
     return int(os.environ.get("LOG_RETENTION_DAYS", str(DEFAULT_LOG_RETENTION_DAYS)))
+
+
+def location_cache_precision() -> int:
+    return int(os.environ.get("LOCATION_CACHE_PRECISION", str(DEFAULT_LOCATION_CACHE_PRECISION)))
+
+
+def location_reverse_geocoding_enabled() -> bool:
+    return os.environ.get("LOCATION_REVERSE_GEOCODING_ENABLED", DEFAULT_LOCATION_REVERSE_GEOCODING_ENABLED) not in {
+        "0",
+        "false",
+        "False",
+    }
+
+
+def location_reverse_geocoder() -> str:
+    return os.environ.get("LOCATION_REVERSE_GEOCODER", DEFAULT_LOCATION_REVERSE_GEOCODER).strip().lower()
+
+
+def location_geocoder_throttle_seconds() -> float:
+    return float(os.environ.get("LOCATION_GEOCODER_THROTTLE_SECONDS", str(DEFAULT_LOCATION_GEOCODER_THROTTLE_SECONDS)))
+
+
+def location_resolve_limit() -> int:
+    return int(os.environ.get("LOCATION_RESOLVE_LIMIT", str(DEFAULT_LOCATION_RESOLVE_LIMIT)))
+
+
+def location_suggest_limit() -> int:
+    return int(os.environ.get("LOCATION_SUGGEST_LIMIT", str(DEFAULT_LOCATION_SUGGEST_LIMIT)))
+
+
+def location_nominatim_url() -> str:
+    return os.environ.get("LOCATION_NOMINATIM_URL", "https://nominatim.openstreetmap.org/reverse").strip()
+
+
+def location_nominatim_search_url() -> str:
+    return os.environ.get("LOCATION_NOMINATIM_SEARCH_URL", "https://nominatim.openstreetmap.org/search").strip()
+
+
+def location_nominatim_user_agent() -> str:
+    return os.environ.get("LOCATION_NOMINATIM_USER_AGENT", "LocalFacePhotos/0.1 local-first photo library").strip()

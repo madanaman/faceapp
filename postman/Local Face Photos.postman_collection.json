@@ -74,6 +74,40 @@
       "key": "photoTagId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "locationCity",
+      "value": "New Delhi",
+      "type": "string"
+    },
+    {
+      "key": "locationRegion",
+      "value": "Delhi",
+      "type": "string"
+    },
+    {
+      "key": "locationCountry",
+      "value": "India",
+      "type": "string"
+    },
+    {
+      "key": "locationLabel",
+      "value": "New Delhi, Delhi, India",
+      "type": "string"
+    },
+    {
+      "key": "searchRegion",
+      "value": "Ontario",
+      "type": "string"
+    },
+    {
+      "key": "searchCountry",
+      "value": "Canada",
+      "type": "string"
+    },
+    {
+      "key": "backupPath",
+      "value": "/tmp/local-face-photos-backup"
     }
   ],
   "item": [
@@ -178,7 +212,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"path\": \"{{scanPath}}\",\n  \"scanMode\": \"{{scanMode}}\",\n  \"albumName\": \"{{albumName}}\"\n}"
+              "raw": "{\n  \"path\": \"{{scanPath}}\",\n  \"scanMode\": \"{{scanMode}}\",\n  \"albumName\": \"{{albumName}}\",\n  \"location\": {\n    \"label\": \"{{locationLabel}}\"\n  }\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/scan",
@@ -190,7 +224,7 @@
                 "scan"
               ]
             },
-            "description": "Scans a local folder. `scanMode` supports `photos`, `videos`, or `both`. Optional `albumName` adds every indexed file from this scan to an album. Large libraries and videos can take a while."
+            "description": "Scans a local folder. `scanMode` supports `photos`, `videos`, or `both`. Optional `albumName` adds every indexed file from this scan to an album. Optional `location.label` assigns a scan-time location using backend suggestion/normalization. Large libraries and videos can take a while."
           },
           "event": [
             {
@@ -317,9 +351,19 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/search?album={{albumName}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "search"],
-              "query": [{"key": "album", "value": "{{albumName}}"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "album",
+                  "value": "{{albumName}}"
+                }
+              ]
             },
             "description": "Searches indexed files by album name."
           }
@@ -331,11 +375,69 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/search?tag={{photoTagName}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "search"],
-              "query": [{"key": "tag", "value": "{{photoTagName}}"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "tag",
+                  "value": "{{photoTagName}}"
+                }
+              ]
             },
             "description": "Searches indexed files by descriptive photo tag."
+          }
+        },
+        {
+          "name": "GET /api/search?region={{searchRegion}}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/search?region={{searchRegion}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "region",
+                  "value": "{{searchRegion}}"
+                }
+              ]
+            },
+            "description": "Searches indexed files by exact region/state match."
+          }
+        },
+        {
+          "name": "GET /api/search?country={{searchCountry}}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/search?country={{searchCountry}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "country",
+                  "value": "{{searchCountry}}"
+                }
+              ]
+            },
+            "description": "Searches indexed files by exact country match."
           }
         }
       ]
@@ -348,34 +450,96 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": {"raw": "{{baseUrl}}/api/albums", "host": ["{{baseUrl}}"], "path": ["api", "albums"]}
+            "url": {
+              "raw": "{{baseUrl}}/api/albums",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "albums"
+              ]
+            }
           }
         },
         {
           "name": "POST /api/albums",
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
-            "body": {"mode": "raw", "raw": "{\n  \"name\": \"{{albumName}}\"\n}"},
-            "url": {"raw": "{{baseUrl}}/api/albums", "host": ["{{baseUrl}}"], "path": ["api", "albums"]}
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{albumName}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/albums",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "albums"
+              ]
+            }
           }
         },
         {
           "name": "POST /api/albums/photos",
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
-            "body": {"mode": "raw", "raw": "{\n  \"albumId\": \"{{albumId}}\",\n  \"fileId\": \"{{fileId}}\"\n}"},
-            "url": {"raw": "{{baseUrl}}/api/albums/photos", "host": ["{{baseUrl}}"], "path": ["api", "albums", "photos"]}
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"albumId\": \"{{albumId}}\",\n  \"fileId\": \"{{fileId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/albums/photos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "albums",
+                "photos"
+              ]
+            }
           }
         },
         {
           "name": "DELETE /api/albums/photos",
           "request": {
             "method": "DELETE",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
-            "body": {"mode": "raw", "raw": "{\n  \"albumId\": \"{{albumId}}\",\n  \"fileId\": \"{{fileId}}\"\n}"},
-            "url": {"raw": "{{baseUrl}}/api/albums/photos", "host": ["{{baseUrl}}"], "path": ["api", "albums", "photos"]}
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"albumId\": \"{{albumId}}\",\n  \"fileId\": \"{{fileId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/albums/photos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "albums",
+                "photos"
+              ]
+            }
           }
         },
         {
@@ -383,34 +547,228 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": {"raw": "{{baseUrl}}/api/photo-tags", "host": ["{{baseUrl}}"], "path": ["api", "photo-tags"]}
+            "url": {
+              "raw": "{{baseUrl}}/api/photo-tags",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "photo-tags"
+              ]
+            }
           }
         },
         {
           "name": "POST /api/photo-tags",
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
-            "body": {"mode": "raw", "raw": "{\n  \"name\": \"{{photoTagName}}\"\n}"},
-            "url": {"raw": "{{baseUrl}}/api/photo-tags", "host": ["{{baseUrl}}"], "path": ["api", "photo-tags"]}
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{photoTagName}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/photo-tags",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "photo-tags"
+              ]
+            }
           }
         },
         {
           "name": "POST /api/photos/tags",
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
-            "body": {"mode": "raw", "raw": "{\n  \"fileId\": \"{{fileId}}\",\n  \"tag\": \"{{photoTagName}}\"\n}"},
-            "url": {"raw": "{{baseUrl}}/api/photos/tags", "host": ["{{baseUrl}}"], "path": ["api", "photos", "tags"]}
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileId\": \"{{fileId}}\",\n  \"tag\": \"{{photoTagName}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/photos/tags",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "photos",
+                "tags"
+              ]
+            }
           }
         },
         {
           "name": "DELETE /api/photos/tags",
           "request": {
             "method": "DELETE",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
-            "body": {"mode": "raw", "raw": "{\n  \"fileId\": \"{{fileId}}\",\n  \"tagId\": \"{{photoTagId}}\"\n}"},
-            "url": {"raw": "{{baseUrl}}/api/photos/tags", "host": ["{{baseUrl}}"], "path": ["api", "photos", "tags"]}
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileId\": \"{{fileId}}\",\n  \"tagId\": \"{{photoTagId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/photos/tags",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "photos",
+                "tags"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Locations",
+      "item": [
+        {
+          "name": "GET /api/locations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/locations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "locations"
+              ]
+            },
+            "description": "Lists known city, region, and country names with indexed media counts."
+          }
+        },
+        {
+          "name": "GET /api/locations/suggest?q={{locationLabel}}",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/locations/suggest?q={{locationLabel}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "locations",
+                "suggest"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "{{locationLabel}}"
+                }
+              ]
+            },
+            "description": "Returns location typeahead suggestions from local indexed/cache data first, then the configured online provider when enabled."
+          }
+        },
+        {
+          "name": "POST /api/locations/resolve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"limit\": 50\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/locations/resolve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "locations",
+                "resolve"
+              ]
+            },
+            "description": "Explicitly resolves GPS-only rows into city/region/country names using the cache-first configured reverse geocoder."
+          }
+        },
+        {
+          "name": "POST /api/photos/location",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileId\": \"{{fileId}}\",\n  \"location\": {\n    \"label\": \"{{locationLabel}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/photos/location",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "photos",
+                "location"
+              ]
+            },
+            "description": "Sets a manual location for one indexed photo or video. The backend resolves `location.label` into city/region/country when possible. Manual location wins over scan defaults and reverse-geocoded GPS."
+          }
+        },
+        {
+          "name": "DELETE /api/photos/location",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileId\": \"{{fileId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/photos/location",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "photos",
+                "location"
+              ]
+            },
+            "description": "Removes stored place data from one indexed photo or video."
           }
         }
       ]
@@ -592,6 +950,116 @@
               ]
             },
             "description": "Clears ignored faces for one indexed file and rescans it."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Backup and Restore",
+      "item": [
+        {
+          "name": "Create Metadata Backup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/backup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "backup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{backupPath}}\",\n  \"includeMedia\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Full Backup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/backup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "backup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{backupPath}}\",\n  \"includeMedia\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Validate Restore",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/restore/validate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "restore",
+                "validate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{backupPath}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Restore Backup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "restore"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"{{backupPath}}\"\n}"
+            }
           }
         }
       ]

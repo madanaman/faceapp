@@ -66,10 +66,11 @@ The demo media is synthetic and does not contain private family photos.
 - Tag people from cropped face thumbnails.
 - Auto-propagate tags to matching untagged faces.
 - Cluster repeated faces in videos so one person is not shown dozens of times.
-- Search by one person, multiple people, albums, or descriptive photo tags.
+- Search by one person, multiple people, albums, descriptive photo tags, or known locations.
 - Interpret simple natural-language searches offline, using your local people, albums, tags, and date filters.
 - Filter by media type, year, month, date, and sort direction.
-- Add albums during scan, or later per photo/video.
+- Add albums and typeahead locations during scan, or later per photo/video.
+- Resolve GPS coordinates into searchable city/region/country names with an explicit cache-first action.
 - Hide videos with no visible/taggable faces by default.
 - Ignore/remove noisy face boxes so they stay hidden on future scans.
 - Store the index locally in SQLite.
@@ -100,9 +101,11 @@ December 2022
 show me photos of Alex from 2022
 show videos with Alex and Jordan from December 2022
 show me Alex's first birthday photos from Ironman Malaysia
+photos from Toronto
+Alex, Toronto
 ```
 
-Search terms can match people, albums, or descriptive photo tags. Multiple terms use comma-separated AND matching, so `Alex, Ironman Malaysia` returns files where both match.
+Search terms can match people, albums, descriptive photo tags, or known places. Multiple terms use comma-separated AND matching, so `Alex, Ironman Malaysia` returns files where both match. GPS coordinates become searchable by name after you click **Resolve GPS** in the location panel, or when you add a scan-time/manual location.
 
 Natural-language search is currently an offline parser, not an external AI call. It works best after you have tagged people and added albums or photo tags, because it matches your words against the local index. Unknown words are ignored rather than sent anywhere.
 
@@ -124,6 +127,7 @@ GPT-5.6 is planned as a future optional layer for richer query understanding. Th
 - [Configuration](docs/configuration.md)
 - [Architecture and local data](docs/architecture.md)
 - [Video scanning](docs/video-scanning.md)
+- [Backup and restore](docs/backup-restore.md)
 - [Desktop packaging](docs/desktop-packaging.md)
 - [API testing with Postman](docs/api-testing.md)
 - [Roadmap](docs/roadmap.md)

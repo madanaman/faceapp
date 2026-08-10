@@ -26,11 +26,18 @@ const state = {
   filteredIds: [],
   albums: [],
   photoTags: [],
+  locations: [],
+  locationSuggestions: new Map(),
+  locationSuggestTimer: null,
+  openLocationNodes: new Set(),
   galleryCursor: 0,
   galleryObserver: null,
   lightboxIndex: 0,
   currentView: { type: "all", title: "All Indexed Files", hint: "Separate people, albums, and photo tags with commas. All terms must match.", terms: [] },
   activities: [],
+  backupPath: "",
+  restorePath: "",
+  restoreValidation: null,
   objectUrls: new Map(),
   backendBaseUrl: "",
   support: {
@@ -48,9 +55,15 @@ const els = {
   pickFolderBtn: document.querySelector("#pickFolderBtn"),
   scanMode: document.querySelector("#scanMode"),
   scanAlbumInput: document.querySelector("#scanAlbumInput"),
+  scanLocationInput: document.querySelector("#scanLocationInput"),
   scanPathBtn: document.querySelector("#scanPathBtn"),
   searchInput: document.querySelector("#searchInput"),
   searchBtn: document.querySelector("#searchBtn"),
+  locationToggle: document.querySelector("#locationToggle"),
+  locationPanel: document.querySelector("#locationPanel"),
+  locationClose: document.querySelector("#locationClose"),
+  locationList: document.querySelector("#locationList"),
+  resolveLocationsBtn: document.querySelector("#resolveLocationsBtn"),
   showAllBtn: document.querySelector("#showAllBtn"),
   untaggedBtn: document.querySelector("#untaggedBtn"),
   fileCount: document.querySelector("#fileCount"),
@@ -65,12 +78,28 @@ const els = {
   createAlbumBtn: document.querySelector("#createAlbumBtn"),
   albumList: document.querySelector("#albumList"),
   photoTagList: document.querySelector("#photoTagList"),
+  libraryBackupMode: document.querySelector("#libraryBackupMode"),
+  libraryRestoreMode: document.querySelector("#libraryRestoreMode"),
+  backupPanel: document.querySelector("#backupPanel"),
+  restorePanel: document.querySelector("#restorePanel"),
+  chooseBackupFolderBtn: document.querySelector("#chooseBackupFolderBtn"),
+  backupFolderLabel: document.querySelector("#backupFolderLabel"),
+  includeMediaBackup: document.querySelector("#includeMediaBackup"),
+  backupBtn: document.querySelector("#backupBtn"),
+  chooseRestoreFolderBtn: document.querySelector("#chooseRestoreFolderBtn"),
+  restoreFolderLabel: document.querySelector("#restoreFolderLabel"),
+  restoreBtn: document.querySelector("#restoreBtn"),
+  backupStatus: document.querySelector("#backupStatus"),
+  backupWarningsToggle: document.querySelector("#backupWarningsToggle"),
+  backupWarningsPanel: document.querySelector("#backupWarningsPanel"),
+  backupWarningsList: document.querySelector("#backupWarningsList"),
   activityToggle: document.querySelector("#activityToggle"),
   activityPanel: document.querySelector("#activityPanel"),
   activityClose: document.querySelector("#activityClose"),
   activityList: document.querySelector("#activityList"),
   personSuggestions: document.querySelector("#personSuggestions"),
   albumSuggestions: document.querySelector("#albumSuggestions"),
+  locationSuggestions: document.querySelector("#locationSuggestions"),
   gallery: document.querySelector("#gallery"),
   galleryTitle: document.querySelector("#galleryTitle"),
   galleryHint: document.querySelector("#galleryHint"),
@@ -83,6 +112,7 @@ const els = {
   lightbox: document.querySelector("#lightbox"),
   lightboxImage: document.querySelector("#lightboxImage"),
   lightboxVideo: document.querySelector("#lightboxVideo"),
+  lightboxUnavailable: document.querySelector("#lightboxUnavailable"),
   lightboxName: document.querySelector("#lightboxName"),
   lightboxMeta: document.querySelector("#lightboxMeta"),
   lightboxClose: document.querySelector("#lightboxClose"),
@@ -129,6 +159,7 @@ function bindEvents() {
   els.albumNameInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") createAlbum();
   });
+  els.scanLocationInput.addEventListener("input", () => scheduleLocationSuggestions(els.scanLocationInput.value));
   els.mediaFilter.addEventListener("change", renderCurrentView);
   els.showNoFaceVideos.addEventListener("change", renderCurrentView);
   els.yearFilter.addEventListener("change", renderCurrentView);
@@ -145,6 +176,16 @@ function bindEvents() {
   els.searchInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") search();
   });
+  els.locationToggle.addEventListener("click", toggleLocationPanel);
+  els.locationClose.addEventListener("click", () => setLocationPanel(false));
+  els.resolveLocationsBtn.addEventListener("click", resolveLocations);
+  els.libraryBackupMode.addEventListener("click", () => toggleLibraryToolMode("backup"));
+  els.libraryRestoreMode.addEventListener("click", () => toggleLibraryToolMode("restore"));
+  els.chooseBackupFolderBtn.addEventListener("click", chooseBackupFolder);
+  els.chooseRestoreFolderBtn.addEventListener("click", chooseRestoreFolder);
+  els.backupBtn.addEventListener("click", createLibraryBackup);
+  els.restoreBtn.addEventListener("click", restoreLibraryBackup);
+  els.backupWarningsToggle.addEventListener("click", toggleBackupWarnings);
   els.activityToggle.addEventListener("click", toggleActivityPanel);
   els.activityClose.addEventListener("click", () => setActivityPanel(false));
   document.addEventListener("click", handleActivityOutsideClick);
@@ -183,6 +224,67 @@ async function pickFolder(invoke) {
   return payload.path || "";
 }
 
+async function chooseBackupFolder() {
+  setLibraryToolMode("backup");
+  try {
+    const path = await pickFolder(desktopInvoke());
+    if (!path) return;
+    state.backupPath = path;
+    els.backupBtn.disabled = false;
+    els.backupFolderLabel.textContent = displayFolderName(path);
+    els.backupFolderLabel.title = path;
+    setBackupStatus(`Backup folder selected: ${displayFolderName(path)}.`);
+  } catch (error) {
+    setBackupStatus(error.message || "Could not choose backup folder.", true);
+    setProgress(error.message || "Could not choose backup folder.", 0);
+  }
+}
+
+async function chooseRestoreFolder() {
+  setLibraryToolMode("restore");
+  try {
+    const path = await pickFolder(desktopInvoke());
+    if (!path) return;
+    state.restorePath = path;
+    state.restoreValidation = null;
+    els.restoreBtn.disabled = true;
+    els.restoreFolderLabel.textContent = displayFolderName(path);
+    els.restoreFolderLabel.title = path;
+    await validateLibraryRestore();
+  } catch (error) {
+    setBackupStatus(error.message || "Could not choose restore folder.", true);
+    setProgress(error.message || "Could not choose restore folder.", 0);
+  }
+}
+
+function toggleLibraryToolMode(mode) {
+  const currentMode = els.backupPanel.hidden ? (els.restorePanel.hidden ? "" : "restore") : "backup";
+  setLibraryToolMode(currentMode === mode ? "" : mode);
+}
+
+function setLibraryToolMode(mode) {
+  const backupOpen = mode === "backup";
+  const restoreOpen = mode === "restore";
+  els.backupPanel.hidden = !backupOpen;
+  els.restorePanel.hidden = !restoreOpen;
+  els.libraryBackupMode.classList.toggle("active", backupOpen);
+  els.libraryRestoreMode.classList.toggle("active", restoreOpen);
+  els.libraryBackupMode.setAttribute("aria-expanded", String(backupOpen));
+  els.libraryRestoreMode.setAttribute("aria-expanded", String(restoreOpen));
+  if (backupOpen && !state.backupPath) {
+    setBackupStatus("Choose a backup folder. The local index and thumbnails are always included.");
+    setBackupWarnings([]);
+  }
+  if (restoreOpen && !state.restorePath) {
+    setBackupStatus("Choose a restore folder. The app will validate it before enabling restore.");
+    setBackupWarnings([]);
+  }
+  if (!backupOpen && !restoreOpen) {
+    setBackupStatus("Choose Backup or Restore when you need to protect or recover the local library.");
+    setBackupWarnings([]);
+  }
+}
+
 function setupGalleryPaging() {
   if ("IntersectionObserver" in window) {
     state.galleryObserver = new IntersectionObserver(
@@ -205,7 +307,7 @@ function setupGalleryPaging() {
 function setSupportBadge() {
   if (state.support.backend) {
     els.supportBadge.textContent = state.support.engine || "InsightEdge local engine";
-    els.progressText.textContent = "Enter a local folder path and scan it with the local InsightEdge engine.";
+    els.progressText.textContent = "Choose a folder and scan it with the local InsightEdge engine.";
     return;
   }
 
@@ -271,15 +373,17 @@ async function checkBackend() {
 }
 
 async function restoreBackendIndex() {
-  const [filesResponse, albumsResponse, tagsResponse] = await Promise.all([
+  const [filesResponse, albumsResponse, tagsResponse, locationsResponse] = await Promise.all([
     fetch(apiUrl("/api/files")),
     fetch(apiUrl("/api/albums")),
     fetch(apiUrl("/api/photo-tags")),
+    fetch(apiUrl("/api/locations")),
   ]);
-  const [records, albums, tags] = await Promise.all([
+  const [records, albums, tags, locations] = await Promise.all([
     filesResponse.json(),
     albumsResponse.json(),
     tagsResponse.json(),
+    locationsResponse.json(),
   ]);
   state.files.clear();
   for (const record of records) {
@@ -287,6 +391,7 @@ async function restoreBackendIndex() {
   }
   state.albums = albums;
   state.photoTags = tags;
+  state.locations = locations;
   populateYearFilter();
   if (records.length) {
     els.progressText.textContent = "Saved server index restored.";
@@ -296,21 +401,22 @@ async function restoreBackendIndex() {
 async function scanPath() {
   const path = els.pathInput.value.trim();
   if (!path) {
-    setProgress("Enter a folder path first.", 0);
+    setProgress("Choose a folder first.", 0);
     return;
   }
 
   const scanMode = els.scanMode.value;
   const modeLabel = els.scanMode.selectedOptions[0]?.textContent.toLowerCase() || "photos";
   const albumName = els.scanAlbumInput.value.trim();
+  const location = scanLocationInput();
   const activityId = startActivity(`Scan ${modeLabel}`, displayFolderName(path));
-  setProgress(`Scanning ${modeLabel}${albumName ? ` into "${albumName}"` : ""} with InsightEdge. Large libraries can take a while...`, 8);
+  setProgress(`Scanning ${modeLabel}${albumName ? ` into "${albumName}"` : ""}${locationLabel(location) ? ` at ${locationLabel(location)}` : ""} with InsightEdge. Large libraries can take a while...`, 8);
   els.scanPathBtn.disabled = true;
   try {
     const response = await fetch(apiUrl("/api/scan"), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path, scanMode, albumName }),
+      body: JSON.stringify({ path, scanMode, albumName, location }),
     });
     const payload = await response.json();
     if (!payload.ok) throw new Error(payload.error || "Scan failed.");
@@ -320,13 +426,15 @@ async function scanPath() {
     }
     if (payload.albums) state.albums = payload.albums;
     if (payload.tags) state.photoTags = payload.tags;
+    if (payload.locations) state.locations = payload.locations;
     populateYearFilter();
     els.folderLabel.textContent = displayFolderName(path);
     els.folderLabel.title = path;
     const autoTagged = payload.autoTagged ? ` ${payload.autoTagged} faces auto-tagged.` : "";
     const warningText = payload.warnings?.length ? ` ${payload.warnings.length} files warned/skipped.` : "";
     const albumText = albumName ? ` Added to "${albumName}".` : "";
-    setProgress(`Scan complete: ${payload.files.length} files indexed.${autoTagged}${warningText}${albumText}`, 100);
+    const locationText = locationLabel(location) ? ` Location set to ${locationLabel(location)}.` : "";
+    setProgress(`Scan complete: ${payload.files.length} files indexed.${autoTagged}${warningText}${albumText}${locationText}`, 100);
     finishActivity(activityId, "done", `${payload.files.length} files indexed${payload.warnings?.length ? `, ${payload.warnings.length} warnings` : ""}`);
     showAll();
   } catch (error) {
@@ -419,6 +527,9 @@ function renderPhoto(fileRecord) {
   const mediaWrap = fragment.querySelector(".media-wrap");
   const name = fragment.querySelector(".file-name");
   const path = fragment.querySelector(".file-path");
+  const badges = fragment.querySelector(".photo-badges");
+  const faceSummary = fragment.querySelector(".face-summary");
+  const facesSection = fragment.querySelector(".faces-section");
   const faces = fragment.querySelector(".faces");
   const rescanButton = fragment.querySelector(".rescan-photo");
   const resetIgnoredButton = fragment.querySelector(".reset-ignored");
@@ -426,6 +537,9 @@ function renderPhoto(fileRecord) {
   const albumSelect = fragment.querySelector(".album-select");
   const customTagInput = fragment.querySelector(".custom-tag-input");
   const addCustomTagButton = fragment.querySelector(".add-custom-tag");
+  const locationInput = fragment.querySelector(".location-input");
+  const saveLocationButton = fragment.querySelector(".save-location");
+  const removeLocationButton = fragment.querySelector(".remove-location");
   const bulkBar = fragment.querySelector(".bulk-face-actions");
   const bulkCount = fragment.querySelector(".bulk-face-count");
   const bulkRemoveButton = fragment.querySelector(".bulk-remove-face");
@@ -441,7 +555,12 @@ function renderPhoto(fileRecord) {
   name.textContent = fileRecord.name;
   path.textContent = displayFileLocation(fileRecord.path);
   path.title = fileRecord.path;
-  renderPhotoCollectionControls(fileRecord, tagChips, albumSelect);
+  renderPhotoBadges(fileRecord, badges);
+  renderPhotoCollectionControls(fileRecord, tagChips, albumSelect, {
+    input: locationInput,
+    saveButton: saveLocationButton,
+    removeButton: removeLocationButton,
+  });
   albumSelect.addEventListener("change", () => addPhotoToAlbum(fileRecord, albumSelect));
   addCustomTagButton.addEventListener("click", () => addCustomPhotoTag(fileRecord, customTagInput, addCustomTagButton));
   customTagInput.addEventListener("keydown", (event) => {
@@ -458,11 +577,13 @@ function renderPhoto(fileRecord) {
   }
   mediaWrap.style.aspectRatio = `${fileRecord.width || 4} / ${fileRecord.height || 3}`;
 
-  const media = createMediaElement(fileRecord);
+  const media = createMediaElement(fileRecord, () => showMediaUnavailable(mediaWrap, fileRecord));
   mediaWrap.append(media);
   mediaWrap.addEventListener("click", () => openLightbox(fileRecord.id));
 
   const visibleFaces = displayFaces(fileRecord);
+  facesSection.open = visibleFaces.some((face) => !normalizeName(face.tag));
+  faceSummary.textContent = formatFaceSummary(fileRecord, visibleFaces);
   for (const face of visibleFaces) {
     if (!isVideoRecord(fileRecord)) {
       mediaWrap.append(renderFaceBox(face, fileRecord));
@@ -491,7 +612,24 @@ function renderPhoto(fileRecord) {
   return card;
 }
 
-function renderPhotoCollectionControls(fileRecord, tagChips, albumSelect) {
+function renderPhotoBadges(fileRecord, container) {
+  const badges = [
+    ...(fileRecord.albums || []).map((album) => `Album: ${album.name}`),
+    ...(fileRecord.tags || []).map((tag) => tag.name),
+    locationLabel(fileRecord.place || {}),
+  ].filter(Boolean);
+
+  container.replaceChildren(
+    ...badges.slice(0, 5).map((label) => {
+      const badge = document.createElement("span");
+      badge.className = "photo-badge";
+      badge.textContent = label;
+      return badge;
+    }),
+  );
+}
+
+function renderPhotoCollectionControls(fileRecord, tagChips, albumSelect, locationControls) {
   const chips = [
     ...(fileRecord.albums || []).map((album) => ({ ...album, label: album.name, type: "album" })),
     ...(fileRecord.tags || []).map((tag) => ({ ...tag, label: tag.name, type: "tag" })),
@@ -531,6 +669,23 @@ function renderPhotoCollectionControls(fileRecord, tagChips, albumSelect) {
       albumSelect.append(new Option(album.name, String(album.id)));
     }
   }
+
+  const place = fileRecord.place || {};
+  locationControls.input.value = locationLabel(place);
+  locationControls.input.addEventListener("input", () => scheduleLocationSuggestions(locationControls.input.value));
+  locationControls.saveButton.addEventListener("click", () => savePhotoLocation(fileRecord, locationControls));
+  locationControls.removeButton.disabled = !locationLabel(place);
+  locationControls.removeButton.addEventListener("click", () => removePhotoLocation(fileRecord, locationControls.removeButton));
+}
+
+function formatFaceSummary(fileRecord, visibleFaces) {
+  if (!visibleFaces.length) return fileRecord.faces.length ? "No main faces to tag" : "No faces detected";
+  const untaggedCount = visibleFaces.filter((face) => !normalizeName(face.tag)).length;
+  if (untaggedCount) return `${untaggedCount} untagged face${untaggedCount === 1 ? "" : "s"}`;
+  const names = [...new Set(visibleFaces.map((face) => face.tag).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  if (!names.length) return `${visibleFaces.length} face${visibleFaces.length === 1 ? "" : "s"}`;
+  if (names.length <= 2) return names.join(", ");
+  return `${names.slice(0, 2).join(", ")} + ${names.length - 2}`;
 }
 
 function sortedFaces(faces) {
@@ -616,10 +771,13 @@ function renderLightbox() {
   const isVideo = VIDEO_TYPES.has(fileRecord.type);
   els.lightboxImage.style.display = isVideo ? "none" : "block";
   els.lightboxVideo.style.display = isVideo ? "block" : "none";
+  els.lightboxUnavailable.hidden = true;
   if (isVideo) {
+    els.lightboxVideo.onerror = () => showLightboxMediaUnavailable(fileRecord);
     els.lightboxVideo.src = getObjectUrl(fileRecord);
     els.lightboxImage.removeAttribute("src");
   } else {
+    els.lightboxImage.onerror = () => showLightboxMediaUnavailable(fileRecord);
     els.lightboxImage.src = getObjectUrl(fileRecord);
     els.lightboxImage.alt = fileRecord.name;
     els.lightboxVideo.pause();
@@ -637,20 +795,48 @@ function handleLightboxKeys(event) {
   if (event.key === "ArrowLeft") stepLightbox(-1);
   if (event.key === "ArrowRight") stepLightbox(1);
 }
-function createMediaElement(fileRecord) {
+function createMediaElement(fileRecord, onUnavailable = () => {}) {
   const url = getObjectUrl(fileRecord);
   if (VIDEO_TYPES.has(fileRecord.type)) {
     const video = document.createElement("video");
     video.src = url;
     video.controls = true;
     video.preload = "metadata";
+    video.addEventListener("error", onUnavailable, { once: true });
     return video;
   }
 
   const img = document.createElement("img");
   img.src = url;
   img.alt = fileRecord.name;
+  img.addEventListener("error", onUnavailable, { once: true });
   return img;
+}
+
+function showMediaUnavailable(container, fileRecord) {
+  const placeholder = document.createElement("div");
+  placeholder.className = "media-unavailable";
+  const title = document.createElement("strong");
+  title.textContent = "Media unavailable";
+  const detail = document.createElement("span");
+  detail.textContent = displayFileLocation(fileRecord.path);
+  detail.title = fileRecord.path;
+  placeholder.append(title, detail);
+  container.classList.add("unavailable");
+  container.replaceChildren(placeholder);
+}
+
+function showLightboxMediaUnavailable(fileRecord) {
+  if (state.filteredIds[state.lightboxIndex] !== fileRecord.id) return;
+  els.lightboxImage.style.display = "none";
+  els.lightboxVideo.style.display = "none";
+  els.lightboxVideo.pause();
+  els.lightboxUnavailable.hidden = false;
+  const detail = els.lightboxUnavailable.querySelector("span");
+  if (detail) {
+    detail.textContent = displayFileLocation(fileRecord.path);
+    detail.title = fileRecord.path;
+  }
 }
 
 function getObjectUrl(fileRecord) {
@@ -679,7 +865,9 @@ function displayFileLocation(path = "") {
 }
 
 function displayFolderName(path = "") {
-  return pathParts(path).at(-1) || path || "No folder selected";
+  const parts = pathParts(path);
+  if (parts.length) return parts.slice(-3).join(" / ");
+  return path || "No folder selected";
 }
 
 function pathParts(path = "") {
@@ -759,15 +947,18 @@ function renderFaceEditor(fileRecord, face, onSelectionChange = () => {}) {
     await tagSavePromise;
   };
   input.addEventListener("blur", () => {
-    commitTag();
+    void commitTag();
+  });
+  input.addEventListener("focusout", () => {
+    void commitTag();
   });
   input.addEventListener("change", () => {
-    commitTag();
+    void commitTag();
   });
   input.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      commitTag();
+      void commitTag();
     }
   });
   removeButton.addEventListener("click", () => removeFace(fileRecord, face));
@@ -993,6 +1184,7 @@ function matchesCurrentGalleryFilters(fileRecord) {
     matchesVisibleVideoFaces(fileRecord) &&
     matchesPeople(fileRecord, state.currentView.terms || []) &&
     matchesSelectedAlbum(fileRecord) &&
+    matchesLocationFilter(fileRecord) &&
     matchesDateFilters(fileRecord)
   );
 }
@@ -1027,6 +1219,23 @@ function syncFileRecord(fileRecord, updatedFile) {
   Object.assign(fileRecord, updatedFile);
   state.files.set(fileRecord.id, fileRecord);
   return fileRecord;
+}
+
+function updateAfterFaceTag(fileRecord, faceIds, tag, payload = null) {
+  if (payload) {
+    syncLibraryPayload(payload);
+  }
+  const updatedFile = state.files.get(fileRecord.id) || fileRecord;
+  applyTagToFileRecord(updatedFile, faceIds, tag);
+  const currentFile = syncFileRecord(fileRecord, updatedFile);
+  updateStats();
+
+  if (shouldRerenderAfterTag(currentFile) || !replaceGalleryCard(fileRecord.id)) {
+    renderCurrentView({ preserveScroll: true });
+  } else {
+    refreshRenderedFaceTags();
+  }
+  return currentFile;
 }
 
 function refreshRenderedFaceTags() {
@@ -1095,13 +1304,33 @@ function matchesPeople(fileRecord, terms) {
     ...(fileRecord.faces || []).map((face) => normalizeName(face.tag)),
     ...(fileRecord.albums || []).map((album) => normalizeName(album.name)),
     ...(fileRecord.tags || []).map((tag) => normalizeName(tag.name)),
+    ...placeSearchTerms(fileRecord),
   ].filter(Boolean));
   return terms.every((term) => searchableTerms.has(term));
+}
+
+function placeSearchTerms(fileRecord) {
+  const place = fileRecord.place || {};
+  return [place.city, place.region, place.country].map(normalizeName).filter(Boolean);
 }
 
 function matchesSelectedAlbum(fileRecord) {
   if (state.currentView.type !== "album") return true;
   return (fileRecord.albums || []).some((album) => album.id === state.currentView.albumId);
+}
+
+function matchesLocationFilter(fileRecord) {
+  if (state.currentView.type !== "location") return true;
+  const filter = state.currentView.locationFilter || {};
+  const place = fileRecord.place || {};
+  if (filter.country === "Other locations") {
+    if (place.country) return false;
+  } else if (filter.country && normalizeName(place.country) !== normalizeName(filter.country)) {
+    return false;
+  }
+  if (filter.region && normalizeName(place.region) !== normalizeName(filter.region)) return false;
+  if (filter.city && normalizeName(place.city) !== normalizeName(filter.city)) return false;
+  return true;
 }
 
 function matchesMediaFilter(fileRecord) {
@@ -1200,6 +1429,7 @@ function renderPeople() {
 
 function renderCollections() {
   renderAlbumSuggestions();
+  renderLocations();
   renderCollectionButtons(els.albumList, state.albums, "No albums yet.", (album) => {
     state.currentView = {
       type: "album",
@@ -1214,6 +1444,252 @@ function renderCollections() {
     els.searchInput.value = tag.name;
     search();
   });
+}
+
+function renderLocations() {
+  els.locationList.replaceChildren();
+  const tree = locationTree();
+  const unresolved = unresolvedGpsCount();
+  if (!tree.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = unresolved
+      ? `${unresolved} GPS-tagged file${unresolved === 1 ? "" : "s"} can be resolved into place names.`
+      : "No named locations yet.";
+    els.locationList.append(empty);
+    renderLocationResolveNote(unresolved);
+    return;
+  }
+
+  renderLocationResolveNote(unresolved);
+  for (const country of tree) {
+    const countryNode = document.createElement("details");
+    countryNode.className = "location-node";
+    const countryKey = locationNodeKey("country", { country: country.name });
+    countryNode.open = tree.length === 1 || state.openLocationNodes.has(countryKey);
+    countryNode.append(locationSummary(country.name, country.count, (event) => {
+      toggleLocationNode(event, countryKey, countryNode);
+      setLocationFilter("country", { country: country.name }, false);
+    }));
+
+    for (const region of country.regions) {
+      const regionNode = document.createElement("details");
+      regionNode.className = "location-node nested";
+      const regionKey = locationNodeKey("region", { country: country.name, region: region.name });
+      regionNode.open = country.regions.length === 1 || state.openLocationNodes.has(regionKey);
+      regionNode.append(locationSummary(region.name, region.count, (event) => {
+        toggleLocationNode(event, regionKey, regionNode);
+        setLocationFilter("region", { country: country.name, region: region.name }, false);
+      }));
+
+      for (const city of region.cities) {
+        const cityButton = locationLeaf(city.name, city.count, () => setLocationFilter("city", {
+          country: country.name,
+          region: region.name,
+          city: city.name,
+        }, true));
+        regionNode.append(cityButton);
+      }
+
+      countryNode.append(regionNode);
+    }
+
+    for (const city of country.cities) {
+      countryNode.append(locationLeaf(city.name, city.count, () => setLocationFilter("city", { country: country.name, city: city.name }, true)));
+    }
+
+    els.locationList.append(countryNode);
+  }
+}
+
+function renderLocationResolveNote(unresolved) {
+  if (!unresolved) return;
+  const note = document.createElement("div");
+  note.className = "location-resolve-note";
+  note.textContent = `${unresolved} GPS-tagged file${unresolved === 1 ? "" : "s"} not named yet. Resolve GPS is an explicit online lookup.`;
+  els.locationList.append(note);
+}
+
+function locationTree() {
+  const countries = new Map();
+  for (const fileRecord of state.files.values()) {
+    const place = fileRecord.place || {};
+    if (!hasNamedLocation(place)) continue;
+    const countryName = place.country || "Other locations";
+    const regionName = place.region || "";
+    const cityName = place.city || "";
+    const country = ensureLocationNode(countries, countryName, fileRecord.id);
+    if (regionName) {
+      const region = ensureLocationNode(country.regionMap, regionName, fileRecord.id);
+      if (cityName) ensureLocationNode(region.cityMap, cityName, fileRecord.id);
+    } else if (cityName) {
+      ensureLocationNode(country.cityMap, cityName, fileRecord.id);
+    }
+  }
+  return [...countries.values()].map(finalizeLocationNode).sort(compareLocationNodes);
+}
+
+function ensureLocationNode(map, name, fileId) {
+  if (!map.has(name)) {
+    map.set(name, { name, ids: new Set(), regionMap: new Map(), cityMap: new Map() });
+  }
+  const node = map.get(name);
+  node.ids.add(fileId);
+  return node;
+}
+
+function finalizeLocationNode(node) {
+  return {
+    name: node.name,
+    count: node.ids.size,
+    regions: [...node.regionMap.values()].map(finalizeLocationNode).sort(compareLocationNodes),
+    cities: [...node.cityMap.values()].map(finalizeLocationNode).sort(compareLocationNodes),
+  };
+}
+
+function compareLocationNodes(a, b) {
+  return a.name.localeCompare(b.name);
+}
+
+function locationSummary(label, count, onClick) {
+  const summary = document.createElement("summary");
+  summary.innerHTML = `<strong></strong><span></span>`;
+  summary.querySelector("strong").textContent = label;
+  summary.querySelector("span").textContent = count;
+  summary.addEventListener("click", onClick);
+  return summary;
+}
+
+function toggleLocationNode(event, key, node) {
+  event.preventDefault();
+  const nextOpen = !node.open;
+  node.open = nextOpen;
+  if (nextOpen) {
+    state.openLocationNodes.add(key);
+  } else {
+    state.openLocationNodes.delete(key);
+  }
+}
+
+function locationNodeKey(type, place) {
+  return [type, place.country || "", place.region || "", place.city || ""].map(normalizeName).join("|");
+}
+
+function locationLeaf(label, count, onClick) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "location-leaf";
+  wrapper.append(locationButton(label, count, onClick));
+  return wrapper;
+}
+
+function locationButton(label, count, onClick) {
+  const button = document.createElement("button");
+  button.className = "person-button location-button";
+  button.type = "button";
+  button.innerHTML = `<strong></strong><span></span>`;
+  button.querySelector("strong").textContent = label;
+  button.querySelector("span").textContent = count;
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onClick();
+  });
+  return button;
+}
+
+function setLocationFilter(type, place, closePanel = false) {
+  const label = locationLabel(place);
+  els.searchInput.value = label;
+  state.currentView = {
+    type: "location",
+    title: `Location: ${label}`,
+    hint: "Showing files from the selected location.",
+    terms: [],
+    locationFilter: { type, ...place },
+  };
+  if (closePanel) setLocationPanel(false);
+  applyGalleryFilters();
+}
+
+function toggleLocationPanel() {
+  setLocationPanel(els.locationPanel.hidden);
+}
+
+function setLocationPanel(isOpen) {
+  els.locationPanel.hidden = !isOpen;
+  els.locationToggle.setAttribute("aria-expanded", String(isOpen));
+  if (isOpen) renderLocations();
+}
+
+function scanLocationInput() {
+  return locationFromInput(els.scanLocationInput);
+}
+
+function locationLabel(place = {}) {
+  return place.label || [place.city, place.region, place.country].filter(Boolean).join(", ");
+}
+
+function hasNamedLocation(place = {}) {
+  return Boolean(place.city || place.region || place.country);
+}
+
+function unresolvedGpsCount() {
+  return [...state.files.values()].filter((fileRecord) => {
+    const place = fileRecord.place || {};
+    return place.latitude !== null && place.latitude !== undefined
+      && place.longitude !== null && place.longitude !== undefined
+      && !hasNamedLocation(place);
+  }).length;
+}
+
+function locationFromInput(input) {
+  const label = input.value.trim();
+  if (!label) return {};
+  const suggestion = state.locationSuggestions.get(normalizeName(label));
+  if (suggestion) {
+    return {
+      label: suggestion.label,
+      city: suggestion.city || "",
+      region: suggestion.region || "",
+      country: suggestion.country || "",
+      latitude: suggestion.latitude,
+      longitude: suggestion.longitude,
+    };
+  }
+  return { label };
+}
+
+function scheduleLocationSuggestions(query) {
+  window.clearTimeout(state.locationSuggestTimer);
+  const cleanQuery = query.trim();
+  if (cleanQuery.length < 2 || !state.support.backend) return;
+  state.locationSuggestTimer = window.setTimeout(() => fetchLocationSuggestions(cleanQuery), 250);
+}
+
+async function fetchLocationSuggestions(query) {
+  try {
+    const response = await fetch(apiUrl(`/api/locations/suggest?q=${encodeURIComponent(query)}`));
+    if (!response.ok) return;
+    const suggestions = await response.json();
+    renderLocationSuggestions(suggestions);
+  } catch {
+    // Suggestions are helpful but non-critical; typed labels can still be saved.
+  }
+}
+
+function renderLocationSuggestions(suggestions) {
+  state.locationSuggestions.clear();
+  for (const suggestion of suggestions || []) {
+    if (!suggestion.label) continue;
+    state.locationSuggestions.set(normalizeName(suggestion.label), suggestion);
+  }
+  els.locationSuggestions.replaceChildren(
+    ...[...state.locationSuggestions.values()].map((suggestion) => {
+      const option = document.createElement("option");
+      option.value = suggestion.label;
+      return option;
+    }),
+  );
 }
 
 function renderAlbumSuggestions() {
@@ -1350,6 +1826,232 @@ async function removeCustomPhotoTag(fileRecord, tagId, tagName, button) {
   }
 }
 
+async function savePhotoLocation(fileRecord, controls) {
+  const location = locationFromInput(controls.input);
+  const label = locationLabel(location);
+  if (!label) return;
+  const activityId = startActivity(`Set location ${label}`, fileRecord.name);
+  controls.saveButton.disabled = true;
+  try {
+    setBusy(true, "Saving location...");
+    const payload = await postLibraryMutation("/api/photos/location", {
+      fileId: fileRecord.id,
+      location,
+    });
+    syncLibraryPayload(payload);
+    renderCurrentView({ preserveScroll: true });
+    setProgress(`Set location for ${fileRecord.name}.`, 100);
+    finishActivity(activityId, "done", fileRecord.name);
+  } catch (error) {
+    setProgress(error.message, 0);
+    finishActivity(activityId, "failed", error.message);
+  } finally {
+    controls.saveButton.disabled = false;
+    setBusy(false);
+  }
+}
+
+async function removePhotoLocation(fileRecord, button) {
+  const activityId = startActivity("Remove location", fileRecord.name);
+  button.disabled = true;
+  try {
+    setBusy(true, "Removing location...");
+    const payload = await deleteLibraryMutation("/api/photos/location", { fileId: fileRecord.id });
+    syncLibraryPayload(payload);
+    renderCurrentView({ preserveScroll: true });
+    setProgress(`Removed location from ${fileRecord.name}.`, 100);
+    finishActivity(activityId, "done", fileRecord.name);
+  } catch (error) {
+    setProgress(error.message, 0);
+    finishActivity(activityId, "failed", error.message);
+  } finally {
+    button.disabled = false;
+    setBusy(false);
+  }
+}
+
+async function resolveLocations() {
+  const activityId = startActivity("Resolve GPS locations");
+  els.resolveLocationsBtn.disabled = true;
+  try {
+    setBusy(true, "Resolving GPS locations...");
+    const payload = await postLibraryMutation("/api/locations/resolve", {});
+    syncLibraryPayload(payload);
+    renderCurrentView({ preserveScroll: true });
+    setProgress(`Resolved ${payload.resolved || 0} locations${payload.cached ? `, ${payload.cached} from cache` : ""}.`, 100);
+    finishActivity(activityId, "done", `${payload.resolved || 0} resolved, ${payload.skipped || 0} skipped`);
+  } catch (error) {
+    setProgress(error.message, 0);
+    finishActivity(activityId, "failed", error.message);
+  } finally {
+    els.resolveLocationsBtn.disabled = false;
+    setBusy(false);
+  }
+}
+
+async function createLibraryBackup() {
+  const path = state.backupPath;
+  if (!path) {
+    setBackupStatus("Choose a backup folder first.", true);
+    return;
+  }
+  const includeMedia = els.includeMediaBackup.checked;
+  const activityId = startActivity(includeMedia ? "Full backup" : "Metadata backup", displayFolderName(path));
+  els.backupBtn.disabled = true;
+  try {
+    setBusy(true, "Creating backup...");
+    const payload = await postLibraryMutation("/api/backup", { path, includeMedia });
+    const manifest = payload.manifest || {};
+    const counts = manifest.counts || {};
+    const backupWarnings = payload.warnings || [];
+    const warnings = backupWarnings.length ? ` ${backupWarnings.length} warning${backupWarnings.length === 1 ? "" : "s"}.` : "";
+    setBackupStatus(`Backup complete: ${counts.photos || 0} files, ${counts.mediaCopied || 0} media copied.${warnings}`);
+    setBackupWarnings(backupWarnings);
+    setProgress(`Backup complete at ${displayFolderName(payload.path || path)}.`, 100);
+    finishActivity(activityId, "done", `${manifest.mode || "backup"} backup`);
+  } catch (error) {
+    setBackupStatus(error.message, true);
+    setBackupWarnings([error.message]);
+    setProgress(error.message, 0);
+    finishActivity(activityId, "failed", error.message);
+  } finally {
+    els.backupBtn.disabled = false;
+    setBusy(false);
+  }
+}
+
+async function validateLibraryRestore() {
+  const path = state.restorePath;
+  if (!path) {
+    setBackupStatus("Choose a restore folder first.", true);
+    return null;
+  }
+  const activityId = startActivity("Validate restore", displayFolderName(path));
+  els.chooseRestoreFolderBtn.disabled = true;
+  els.restoreBtn.disabled = true;
+  try {
+    setBusy(true, "Validating backup...");
+    const response = await fetch(apiUrl("/api/restore/validate"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+    const payload = await response.json();
+    const errors = payload.errors || [];
+    const warnings = payload.warnings || [];
+    if (!payload.valid) {
+      throw new Error(errors.join(" ") || payload.error || "Backup is not valid.");
+    }
+    state.restoreValidation = payload;
+    els.restoreBtn.disabled = false;
+    setBackupStatus(describeRestoreValidation(payload));
+    setBackupWarnings(warnings);
+    finishActivity(activityId, "done", `${payload.mode || "valid"} backup`);
+    return payload;
+  } catch (error) {
+    state.restoreValidation = null;
+    setBackupStatus(error.message, true);
+    setBackupWarnings([error.message]);
+    setProgress(error.message, 0);
+    finishActivity(activityId, "failed", error.message);
+    return null;
+  } finally {
+    els.chooseRestoreFolderBtn.disabled = false;
+    setBusy(false);
+  }
+}
+
+async function restoreLibraryBackup() {
+  const path = state.restorePath;
+  if (!path) {
+    setBackupStatus("Choose a restore folder first.", true);
+    return;
+  }
+  const validation = state.restoreValidation || await validateLibraryRestore();
+  if (!validation?.valid) return;
+  const warningCount = validation.warnings?.length || 0;
+  const restorePrompt = warningCount
+    ? `This backup has ${warningCount} warning${warningCount === 1 ? "" : "s"}. Review warning details in Backup & Restore. Restore will recover metadata, thumbnails, and available media, but missing media may not open. Continue?`
+    : "Restore this backup? This replaces the current local index after creating a safety copy.";
+  if (!confirm(restorePrompt)) {
+    return;
+  }
+  const activityId = startActivity("Restore backup", displayFolderName(path));
+  els.restoreBtn.disabled = true;
+  try {
+    setBusy(true, "Restoring backup...");
+    const payload = await postLibraryMutation("/api/restore", { path });
+    syncLibraryPayload(payload);
+    showAll();
+    const mediaText = payload.restoredMediaCount ? ` ${payload.restoredMediaCount} media files restored.` : "";
+    const skippedText = payload.skippedMediaCount ? ` ${payload.skippedMediaCount} media files skipped.` : "";
+    const warningText = payload.validation?.warnings?.length
+      ? ` ${payload.validation.warnings.length} warning${payload.validation.warnings.length === 1 ? "" : "s"}.`
+      : "";
+    setBackupStatus(`Restore complete.${mediaText}${skippedText}${warningText}`);
+    setBackupWarnings(payload.validation?.warnings || []);
+    setProgress("Backup restored.", 100);
+    finishActivity(activityId, "done", `${payload.files?.length || 0} files restored`);
+  } catch (error) {
+    setBackupStatus(error.message, true);
+    setProgress(error.message, 0);
+    finishActivity(activityId, "failed", error.message);
+  } finally {
+    els.restoreBtn.disabled = false;
+    setBusy(false);
+  }
+}
+
+function setBackupStatus(message, isError = false) {
+  els.backupStatus.textContent = message;
+  els.backupStatus.classList.toggle("error", isError);
+}
+
+function setBackupWarnings(warnings = []) {
+  const visibleWarnings = warnings.filter(Boolean);
+  els.backupWarningsList.replaceChildren(
+    ...visibleWarnings.map((warning) => {
+      const item = document.createElement("li");
+      item.textContent = warning;
+      return item;
+    }),
+  );
+  els.backupWarningsToggle.hidden = !visibleWarnings.length;
+  els.backupWarningsToggle.textContent = visibleWarnings.length
+    ? `View warnings (${visibleWarnings.length})`
+    : "View warnings";
+  if (!visibleWarnings.length) {
+    setBackupWarningsPanel(false);
+  }
+}
+
+function toggleBackupWarnings() {
+  setBackupWarningsPanel(els.backupWarningsPanel.hidden);
+}
+
+function setBackupWarningsPanel(isOpen) {
+  els.backupWarningsPanel.hidden = !isOpen;
+  els.backupWarningsToggle.setAttribute("aria-expanded", String(isOpen));
+  if (!els.backupWarningsToggle.hidden) {
+    const count = els.backupWarningsList.children.length;
+    els.backupWarningsToggle.textContent = `${isOpen ? "Hide" : "View"} warnings (${count})`;
+  }
+}
+
+function describeRestoreValidation(payload) {
+  const manifest = payload.manifest || {};
+  const counts = manifest.counts || {};
+  const created = manifest.createdAt ? new Date(manifest.createdAt).toLocaleString() : "";
+  const mode = payload.mode || manifest.mode || "unknown";
+  const mediaText = mode === "full"
+    ? `, ${counts.mediaCopied || 0} media files`
+    : "";
+  const warningText = payload.warnings?.length
+    ? ` ${payload.warnings.length} warning${payload.warnings.length === 1 ? "" : "s"}.`
+    : "";
+  return `Valid ${mode} backup${created ? ` from ${created}` : ""}: ${counts.photos || 0} files, ${counts.faces || 0} faces${mediaText}.${warningText}`;
+}
+
 async function postLibraryMutation(path, body) {
   return libraryMutation(path, "POST", body);
 }
@@ -1378,6 +2080,7 @@ function syncLibraryPayload(payload) {
   }
   if (payload.albums) state.albums = payload.albums;
   if (payload.tags) state.photoTags = payload.tags;
+  if (payload.locations) state.locations = payload.locations;
   populateYearFilter();
   updateStats();
 }
@@ -1424,6 +2127,7 @@ async function saveFaceTag(fileRecord, face, tag) {
     if (!state.support.backend) {
       applyTagToFileRecord(fileRecord, faceIds, cleanTag);
       await saveFile(fileRecord);
+      updateAfterFaceTag(fileRecord, faceIds, cleanTag);
       finishActivity(activityId, "done", `${faceIds.length} face${faceIds.length === 1 ? "" : "s"} updated`);
       return;
     }
@@ -1437,26 +2141,10 @@ async function saveFaceTag(fileRecord, face, tag) {
     payload = await response.json();
     if (!payload.ok) throw new Error(payload.error || "Could not tag face.");
 
-    if (payload?.files) {
-      state.files.clear();
-      for (const record of payload.files) {
-        state.files.set(record.id, record);
-      }
-      populateYearFilter();
-      if (payload.propagated) {
-        setProgress(`Tagged ${payload.propagated + 1} matching faces.`, 100);
-      }
-      const updatedFile = state.files.get(fileRecord.id);
-      if (updatedFile) {
-        applyTagToFileRecord(updatedFile, faceIds, cleanTag);
-      }
-      const currentFile = syncFileRecord(fileRecord, updatedFile);
-      if (shouldRerenderAfterTag(currentFile) || !replaceGalleryCard(fileRecord.id)) {
-        renderCurrentView({ preserveScroll: true });
-      } else {
-        refreshRenderedFaceTags();
-      }
+    if (payload.propagated) {
+      setProgress(`Tagged ${payload.propagated + 1} matching faces.`, 100);
     }
+    updateAfterFaceTag(fileRecord, faceIds, cleanTag, payload);
     finishActivity(activityId, "done", `${faceIds.length} face${faceIds.length === 1 ? "" : "s"} updated`);
   } catch (error) {
     finishActivity(activityId, "failed", error.message);
@@ -1653,7 +2341,12 @@ async function clearIndex() {
       state.files.clear();
       state.albums = [];
       state.photoTags = [];
-      els.folderLabel.textContent = "No folder selected";
+      state.locations = [];
+      state.locationSuggestions.clear();
+      state.openLocationNodes.clear();
+      els.locationSuggestions.replaceChildren();
+      renderLocations();
+      els.folderLabel.textContent = "Choose a folder to start";
       setProgress("Index cleared.", 0);
       showAll();
       finishActivity(activityId, "done", "Index cleared");
@@ -1728,7 +2421,7 @@ async function rescanPhoto(fileRecord, resetIgnored, button) {
 }
 
 function normalizeName(name = "") {
-  return name.trim().toLocaleLowerCase();
+  return String(name ?? "").trim().toLocaleLowerCase();
 }
 
 function clamp(value, min, max) {

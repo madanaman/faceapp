@@ -13,6 +13,7 @@ Generated files are intentionally ignored by git:
 - `face_index.sqlite3-shm`
 - `.thumbnails/`
 - `.cache/`
+- `restored-media/`
 
 Packaged desktop builds store generated app data outside the source folder:
 
