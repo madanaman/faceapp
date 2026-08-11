@@ -769,19 +769,16 @@ function renderLightbox() {
   if (!fileRecord) return;
 
   const isVideo = VIDEO_TYPES.has(fileRecord.type);
-  els.lightboxImage.style.display = isVideo ? "none" : "block";
-  els.lightboxVideo.style.display = isVideo ? "block" : "none";
-  els.lightboxUnavailable.hidden = true;
+  resetLightboxMedia();
   if (isVideo) {
+    els.lightboxVideo.style.display = "block";
     els.lightboxVideo.onerror = () => showLightboxMediaUnavailable(fileRecord);
     els.lightboxVideo.src = getObjectUrl(fileRecord);
-    els.lightboxImage.removeAttribute("src");
   } else {
+    els.lightboxImage.style.display = "block";
     els.lightboxImage.onerror = () => showLightboxMediaUnavailable(fileRecord);
     els.lightboxImage.src = getObjectUrl(fileRecord);
     els.lightboxImage.alt = fileRecord.name;
-    els.lightboxVideo.pause();
-    els.lightboxVideo.removeAttribute("src");
   }
   els.lightboxName.textContent = fileRecord.name;
   const people = [...new Set(fileRecord.faces.map((face) => face.tag).filter(Boolean))].sort();
@@ -795,6 +792,18 @@ function handleLightboxKeys(event) {
   if (event.key === "ArrowLeft") stepLightbox(-1);
   if (event.key === "ArrowRight") stepLightbox(1);
 }
+
+function resetLightboxMedia() {
+  els.lightboxImage.onerror = null;
+  els.lightboxVideo.onerror = null;
+  els.lightboxVideo.pause();
+  els.lightboxImage.removeAttribute("src");
+  els.lightboxVideo.removeAttribute("src");
+  els.lightboxImage.style.display = "none";
+  els.lightboxVideo.style.display = "none";
+  els.lightboxUnavailable.hidden = true;
+}
+
 function createMediaElement(fileRecord, onUnavailable = () => {}) {
   const url = getObjectUrl(fileRecord);
   if (VIDEO_TYPES.has(fileRecord.type)) {
