@@ -837,6 +837,10 @@ aside {
   text-align: center;
 }
 
+.media-unavailable[hidden] {
+  display: none;
+}
+
 .media-unavailable strong {
   color: var(--ink);
   font-size: 16px;

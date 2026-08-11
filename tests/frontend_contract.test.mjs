@@ -59,10 +59,14 @@ test("gallery cards keep the enlarged photo lightbox with previous and next cont
   assert.match(appJs, /function stepLightbox\(/);
   assert.match(appJs, /mediaWrap\.addEventListener\("click", \(\) => openLightbox\(fileRecord\.id\)\)/);
   assert.match(appJs, /createMediaElement\(fileRecord, \(\) => showMediaUnavailable\(mediaWrap, fileRecord\)\)/);
+  assert.match(appJs, /function resetLightboxMedia\(\)/);
+  assert.match(appJs, /els\.lightboxImage\.onerror = null/);
+  assert.match(appJs, /els\.lightboxVideo\.onerror = null/);
   assert.match(appJs, /function showMediaUnavailable\(container, fileRecord\)/);
   assert.match(appJs, /function showLightboxMediaUnavailable\(fileRecord\)/);
   assert.match(appJs, /addEventListener\("error", onUnavailable, \{ once: true \}\)/);
   assert.match(styles, /\.media-unavailable\s*{/);
+  assert.match(styles, /\.media-unavailable\[hidden\]\s*{/);
   assert.match(styles, /\.lightbox-frame \.media-unavailable\s*{/);
 });
 
@@ -115,7 +119,8 @@ test("video records can render in the gallery and lightbox", () => {
   assert.match(html, /id="lightboxVideo"/);
   assert.match(appJs, /const VIDEO_TYPES = new Set/);
   assert.match(appJs, /document\.createElement\("video"\)/);
-  assert.match(appJs, /els\.lightboxVideo\.style\.display = isVideo \? "block" : "none"/);
+  assert.match(appJs, /resetLightboxMedia\(\)/);
+  assert.match(appJs, /els\.lightboxVideo\.style\.display = "block"/);
 });
 
 test("gallery can filter photos versus videos and hides video preview face boxes", () => {
