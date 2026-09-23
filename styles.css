@@ -700,6 +700,54 @@ aside {
   color: var(--muted);
 }
 
+.memory-list {
+  display: grid;
+  gap: 8px;
+}
+
+.memory-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.memory-button {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  text-align: left;
+}
+
+.memory-button strong,
+.memory-button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-button span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.memory-dismiss {
+  display: inline-grid;
+  place-items: center;
+  min-height: 32px;
+  border-color: #f0c5c5;
+  background: #fff5f5;
+  color: var(--danger);
+  font-size: 17px;
+  font-weight: 800;
+  padding: 0;
+}
+
+.compact-empty {
+  padding: 18px 12px;
+  font-size: 12px;
+}
+
 .collection-create,
 .photo-collection-row {
   display: grid;

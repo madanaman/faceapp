@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from .config import DB_PATH, face_box_iou_threshold, face_reconcile_threshold, location_cache_precision, match_threshold
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 PLACE_SOURCE_PRIORITY = {
     "raw_gps": 1,
     "exif_gps": 1,
@@ -171,6 +171,27 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
             primary key (photo_id, tag_id)
         );
 
+        create table if not exists memories (
+            id text primary key,
+            type text not null,
+            title text not null,
+            subtitle text,
+            cover_photo_id text references photos(id) on delete set null,
+            generated_at text not null,
+            memory_date text,
+            score real not null default 0,
+            dismissed_at text,
+            pinned_at text
+        );
+
+        create table if not exists memory_items (
+            memory_id text not null references memories(id) on delete cascade,
+            photo_id text not null references photos(id) on delete cascade,
+            sort_order integer not null,
+            reason text,
+            primary key (memory_id, photo_id)
+        );
+
         create index if not exists idx_photos_signature on photos(signature);
         create index if not exists idx_faces_photo_id on faces(photo_id);
         create index if not exists idx_face_clusters_photo_id on face_clusters(photo_id);
@@ -184,6 +205,9 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         create index if not exists idx_ignored_faces_photo_id on ignored_faces(photo_id);
         create index if not exists idx_album_photos_photo_id on album_photos(photo_id);
         create index if not exists idx_photo_tag_links_tag_id on photo_tag_links(tag_id);
+        create index if not exists idx_memories_type on memories(type);
+        create index if not exists idx_memories_dismissed_at on memories(dismissed_at);
+        create index if not exists idx_memory_items_photo_id on memory_items(photo_id);
         """
     )
 
@@ -380,6 +404,133 @@ def list_places(conn: sqlite3.Connection) -> list[dict]:
         """
     ).fetchall()
     return [{"name": row["name"], "type": row["type"], "photoCount": row["photo_count"]} for row in rows]
+
+
+def list_memories(conn: sqlite3.Connection, include_dismissed: bool = False) -> list[dict]:
+    where = "" if include_dismissed else "where m.dismissed_at is null"
+    rows = conn.execute(
+        f"""
+        select m.*, count(mi.photo_id) as photo_count
+        from memories m
+        join memory_items mi on mi.memory_id = m.id
+        join photos p on p.id = mi.photo_id
+        {where}
+        group by m.id
+        order by
+            case when m.pinned_at is null then 1 else 0 end,
+            m.score desc,
+            m.generated_at desc,
+            lower(m.title)
+        """
+    ).fetchall()
+    return [memory_to_record(conn, row) for row in rows]
+
+
+def memory_to_record(conn: sqlite3.Connection, memory_row: sqlite3.Row) -> dict:
+    item_rows = conn.execute(
+        """
+        select mi.photo_id, mi.reason
+        from memory_items mi
+        join photos p on p.id = mi.photo_id
+        where mi.memory_id = ?
+        order by mi.sort_order, p.name
+        """,
+        (memory_row["id"],),
+    ).fetchall()
+    return {
+        "id": memory_row["id"],
+        "type": memory_row["type"],
+        "title": memory_row["title"],
+        "subtitle": memory_row["subtitle"] or "",
+        "coverPhotoId": memory_row["cover_photo_id"] or "",
+        "generatedAt": memory_row["generated_at"],
+        "memoryDate": memory_row["memory_date"] or "",
+        "score": memory_row["score"],
+        "dismissedAt": memory_row["dismissed_at"] or "",
+        "pinnedAt": memory_row["pinned_at"] or "",
+        "photoCount": memory_row["photo_count"],
+        "photoIds": [row["photo_id"] for row in item_rows],
+        "reasons": {row["photo_id"]: row["reason"] or "" for row in item_rows},
+    }
+
+
+def save_generated_memories(conn: sqlite3.Connection, memories: list[dict]) -> list[dict]:
+    generated_ids = []
+    for memory in memories:
+        photo_ids = list(dict.fromkeys(memory.get("photoIds", [])))
+        if not photo_ids:
+            continue
+        memory_id = memory["id"]
+        generated_ids.append(memory_id)
+        cover_photo_id = memory.get("coverPhotoId") if memory.get("coverPhotoId") in photo_ids else photo_ids[0]
+        generated_at = memory.get("generatedAt") or datetime.now(UTC).isoformat(timespec="seconds")
+        conn.execute(
+            """
+            insert into memories
+            (id, type, title, subtitle, cover_photo_id, generated_at, memory_date, score)
+            values (?, ?, ?, ?, ?, ?, ?, ?)
+            on conflict(id) do update set
+                type = excluded.type,
+                title = excluded.title,
+                subtitle = excluded.subtitle,
+                cover_photo_id = excluded.cover_photo_id,
+                generated_at = excluded.generated_at,
+                memory_date = excluded.memory_date,
+                score = excluded.score
+            """,
+            (
+                memory_id,
+                memory["type"],
+                memory["title"],
+                memory.get("subtitle", ""),
+                cover_photo_id,
+                generated_at,
+                memory.get("memoryDate", ""),
+                float(memory.get("score", 0)),
+            ),
+        )
+        conn.execute("delete from memory_items where memory_id = ?", (memory_id,))
+        conn.executemany(
+            """
+            insert into memory_items (memory_id, photo_id, sort_order, reason)
+            values (?, ?, ?, ?)
+            """,
+            [
+                (memory_id, photo_id, index, memory.get("reasons", {}).get(photo_id, ""))
+                for index, photo_id in enumerate(photo_ids)
+            ],
+        )
+
+    clear_stale_generated_memories(conn, generated_ids)
+    logger.info("Saved generated memories count=%s", len(generated_ids))
+    return list_memories(conn)
+
+
+def clear_stale_generated_memories(conn: sqlite3.Connection, generated_ids: list[str]) -> None:
+    if generated_ids:
+        placeholders = ", ".join("?" for _ in generated_ids)
+        conn.execute(
+            f"""
+            delete from memories
+            where dismissed_at is null
+              and pinned_at is null
+              and id not in ({placeholders})
+            """,
+            tuple(generated_ids),
+        )
+        return
+    conn.execute("delete from memories where dismissed_at is null and pinned_at is null")
+
+
+def dismiss_memory(conn: sqlite3.Connection, memory_id: str) -> None:
+    row = conn.execute("select 1 from memories where id = ?", (memory_id,)).fetchone()
+    if not row:
+        raise ValueError("Memory not found")
+    conn.execute(
+        "update memories set dismissed_at = ? where id = ?",
+        (datetime.now(UTC).isoformat(timespec="seconds"), memory_id),
+    )
+    logger.info("Dismissed memory id=%s", memory_id)
 
 
 def known_location_suggestions(conn: sqlite3.Connection, query: str, limit: int) -> list[dict]:
@@ -1233,6 +1384,8 @@ def update_faces(conn: sqlite3.Connection, file_id: str, faces: list[dict]) -> N
 def clear_files(conn: sqlite3.Connection) -> None:
     # Delete order matters while foreign keys are enabled.
     # Keep schema/user_version intact; this clears indexed content, not the database structure.
+    conn.execute("delete from memory_items")
+    conn.execute("delete from memories")
     conn.execute("delete from face_people")
     conn.execute("delete from ignored_faces")
     conn.execute("delete from people")

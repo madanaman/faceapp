@@ -244,6 +244,27 @@ test("albums and descriptive photo tags are available from the gallery", () => {
   assert.match(appJs, /deleteLibraryMutation\("\/api\/photos\/tags"/);
 });
 
+test("local memories can be generated dismissed and opened in the gallery", () => {
+  assert.match(html, /<h2>Memories<\/h2>/);
+  assert.match(html, /id="generateMemoriesBtn"/);
+  assert.match(html, /id="memoryList"/);
+  assert.match(appJs, /memories: \[\]/);
+  assert.match(appJs, /generateMemoriesBtn: document\.querySelector\("#generateMemoriesBtn"\)/);
+  assert.match(appJs, /memoryList: document\.querySelector\("#memoryList"\)/);
+  assert.match(appJs, /fetch\(apiUrl\("\/api\/memories"\)\)/);
+  assert.match(appJs, /els\.generateMemoriesBtn\.addEventListener\("click", generateMemories\)/);
+  assert.match(appJs, /function renderMemories\(\)/);
+  assert.match(appJs, /function generateMemories\(\)/);
+  assert.match(appJs, /postLibraryMutation\("\/api\/memories\/generate"/);
+  assert.match(appJs, /function dismissMemory\(memory, button\)/);
+  assert.match(appJs, /postLibraryMutation\("\/api\/memories\/dismiss"/);
+  assert.match(appJs, /function showMemory\(memory\)/);
+  assert.match(appJs, /function matchesMemoryFilter\(fileRecord\)/);
+  assert.match(appJs, /matchesMemoryFilter\(fileRecord\)/);
+  assert.match(styles, /\.memory-list\s*{/);
+  assert.match(styles, /\.memory-row\s*{/);
+});
+
 test("photo cards collapse faces and organize controls by default", () => {
   assert.match(html, /class="card-section faces-section"/);
   assert.match(html, /class="card-section organize-section"/);

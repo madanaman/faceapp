@@ -14,6 +14,7 @@ from .backup import create_backup, restore_backup, validate_restore_source
 from .config import STATIC_ROOT
 from .detector import health_payload
 from .geocoding import location_from_payload, resolve_missing_photo_locations, suggest_locations
+from .memories import generate_local_memories
 from .scanner import rescan_photo, scan_folder
 from .search_parser import parse_search_query
 from .tagging import tag_face
@@ -48,6 +49,12 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/locations":
             with database.connection() as conn:
                 self.send_json(database.list_places(conn))
+            return
+        if parsed.path == "/api/memories":
+            params = parse_qs(parsed.query)
+            include_dismissed = single_param(params, "includeDismissed") in ("1", "true", "yes")
+            with database.connection() as conn:
+                self.send_json(database.list_memories(conn, include_dismissed=include_dismissed))
             return
         if parsed.path == "/api/locations/suggest":
             params = parse_qs(parsed.query)
@@ -126,6 +133,12 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
             return
         if parsed.path == "/api/locations/resolve":
             self.handle_resolve_locations()
+            return
+        if parsed.path == "/api/memories/generate":
+            self.handle_generate_memories()
+            return
+        if parsed.path == "/api/memories/dismiss":
+            self.handle_dismiss_memory()
             return
         if parsed.path == "/api/backup":
             self.handle_backup()
@@ -326,10 +339,32 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
                         "albums": database.list_albums(conn),
                         "tags": database.list_tags(conn),
                         "locations": database.list_places(conn),
+                        "memories": database.list_memories(conn),
                     }
                 )
         except Exception as exc:
             logger.exception("Restore failed")
+            self.send_json({"ok": False, "error": str(exc)}, status=400)
+
+    def handle_generate_memories(self) -> None:
+        try:
+            with database.connection() as conn:
+                with conn:
+                    memories = generate_local_memories(conn)
+                self.send_json({"ok": True, "memories": memories})
+        except Exception as exc:
+            logger.exception("Memory generation failed")
+            self.send_json({"ok": False, "error": str(exc)}, status=400)
+
+    def handle_dismiss_memory(self) -> None:
+        payload = self.read_json()
+        try:
+            with database.connection() as conn:
+                with conn:
+                    database.dismiss_memory(conn, payload["memoryId"])
+                self.send_json({"ok": True, "memories": database.list_memories(conn)})
+        except (KeyError, TypeError, ValueError) as exc:
+            logger.warning("Dismiss memory failed: %s", exc)
             self.send_json({"ok": False, "error": str(exc)}, status=400)
 
     def run_mutation(self, mutation) -> None:
@@ -344,6 +379,7 @@ class LocalFaceHandler(SimpleHTTPRequestHandler):
                         "albums": database.list_albums(conn),
                         "tags": database.list_tags(conn),
                         "locations": database.list_places(conn),
+                        "memories": database.list_memories(conn),
                     }
                 )
         except (KeyError, TypeError, ValueError) as exc:
