@@ -17,6 +17,12 @@ The current public build is available from the GitHub release page:
 - Current Apple Silicon DMG SHA-256: `c99af47122359d3ad82bbb59a1d23301c9b2319a5f4b2ec1c81311d09761d1b5`
 - Experimental Intel Mac x64 builds can be generated from GitHub Actions, but they are community-test candidates until validated on real Intel hardware.
 
+Latest local release candidate:
+
+- Candidate: `local-memories-2026-09-22`
+- Source commit: `4f1de27`
+- Apple Silicon DMG SHA-256: `7119148ad064e566a0d4fce619ed4047fdd022d5bfab99674f33648416844d17`
+
 Important beta notes:
 
 - The Apple Silicon DMG is the currently tested desktop build.
@@ -71,6 +77,7 @@ The demo media is synthetic and does not contain private family photos.
 - Filter by media type, year, month, date, and sort direction.
 - Add albums and typeahead locations during scan, or later per photo/video.
 - Resolve GPS coordinates into searchable city/region/country names with an explicit cache-first action.
+- Generate local memories such as on-this-day groups, albums, photo tags, places, and people over time.
 - Hide videos with no visible/taggable faces by default.
 - Ignore/remove noisy face boxes so they stay hidden on future scans.
 - Store the index locally in SQLite.
@@ -130,6 +137,7 @@ GPT-5.6 is planned as a future optional layer for richer query understanding. Th
 - [Backup and restore](docs/backup-restore.md)
 - [Desktop packaging](docs/desktop-packaging.md)
 - [API testing with Postman](docs/api-testing.md)
+- [Release notes](docs/release-notes.md)
 - [Roadmap](docs/roadmap.md)
 
 ## Contributing
