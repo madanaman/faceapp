@@ -21,6 +21,11 @@ Current roadmap:
   - Start with cloud-synced folders as backup targets.
   - Later add provider APIs such as iCloud Drive, Google Drive, OneDrive, or Dropbox.
   - Keep cloud integration optional and explicit.
+- Memories and phone notifications:
+  - Generate memory collections such as "on this day", trips, birthdays, people over time, and location-based highlights.
+  - Let the laptop act as the local server that prepares memory thumbnails and notification payloads.
+  - Add an opt-in phone companion or notification bridge so memories can be sent to the user's phone without uploading the library to a third-party photo cloud.
+  - Define privacy, network access, and delivery options before implementation.
 - Intel Mac validation and wider platform packaging.
 - Windows desktop build.
 - Signed and notarized macOS releases.

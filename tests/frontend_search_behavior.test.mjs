@@ -13,6 +13,7 @@ const SEARCH_FUNCTIONS = [
   "placeSearchTerms",
   "matchesSelectedAlbum",
   "matchesLocationFilter",
+  "matchesMemoryFilter",
   "matchesMediaFilter",
   "matchesVisibleVideoFaces",
   "matchesDateFilters",
@@ -128,4 +129,19 @@ test("location explorer filters country region and city without crashing on miss
     true,
   );
   assert.equal(model.matchesCurrentGalleryFilters(photoRecord({ place: { city: null, region: null, country: null } })), false);
+});
+
+test("memory view filters by generated memory photo ids", () => {
+  const model = frontendSearchModel({
+    state: {
+      currentView: {
+        type: "memory",
+        terms: [],
+        memoryPhotoIds: new Set(["photo-1"]),
+      },
+    },
+  });
+
+  assert.equal(model.matchesCurrentGalleryFilters(photoRecord()), true);
+  assert.equal(model.matchesCurrentGalleryFilters(photoRecord({ id: "photo-2" })), false);
 });

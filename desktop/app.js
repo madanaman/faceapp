@@ -27,6 +27,7 @@ const state = {
   albums: [],
   photoTags: [],
   locations: [],
+  memories: [],
   locationSuggestions: new Map(),
   locationSuggestTimer: null,
   openLocationNodes: new Set(),
@@ -78,6 +79,8 @@ const els = {
   createAlbumBtn: document.querySelector("#createAlbumBtn"),
   albumList: document.querySelector("#albumList"),
   photoTagList: document.querySelector("#photoTagList"),
+  generateMemoriesBtn: document.querySelector("#generateMemoriesBtn"),
+  memoryList: document.querySelector("#memoryList"),
   libraryBackupMode: document.querySelector("#libraryBackupMode"),
   libraryRestoreMode: document.querySelector("#libraryRestoreMode"),
   backupPanel: document.querySelector("#backupPanel"),
@@ -156,6 +159,7 @@ function bindEvents() {
   els.showAllBtn.addEventListener("click", showAll);
   els.untaggedBtn.addEventListener("click", showUntagged);
   els.createAlbumBtn.addEventListener("click", createAlbum);
+  els.generateMemoriesBtn.addEventListener("click", generateMemories);
   els.albumNameInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") createAlbum();
   });
@@ -307,6 +311,7 @@ function setupGalleryPaging() {
 function setSupportBadge() {
   if (state.support.backend) {
     els.supportBadge.textContent = state.support.engine || "InsightEdge local engine";
+    els.generateMemoriesBtn.disabled = false;
     els.progressText.textContent = "Choose a folder and scan it with the local InsightEdge engine.";
     return;
   }
@@ -315,6 +320,7 @@ function setSupportBadge() {
     els.supportBadge.textContent = "InsightEdge missing";
     els.supportBadge.classList.add("warning");
     els.scanPathBtn.disabled = true;
+    els.generateMemoriesBtn.disabled = true;
     els.progressText.textContent = state.support.backendError;
     return;
   }
@@ -322,6 +328,7 @@ function setSupportBadge() {
   els.supportBadge.textContent = "Start server.py";
   els.supportBadge.classList.add("warning");
   els.scanPathBtn.disabled = true;
+  els.generateMemoriesBtn.disabled = true;
   els.progressText.textContent = "Run `python3 server.py` to use the InsightEdge local engine.";
 }
 
@@ -373,17 +380,19 @@ async function checkBackend() {
 }
 
 async function restoreBackendIndex() {
-  const [filesResponse, albumsResponse, tagsResponse, locationsResponse] = await Promise.all([
+  const [filesResponse, albumsResponse, tagsResponse, locationsResponse, memoriesResponse] = await Promise.all([
     fetch(apiUrl("/api/files")),
     fetch(apiUrl("/api/albums")),
     fetch(apiUrl("/api/photo-tags")),
     fetch(apiUrl("/api/locations")),
+    fetch(apiUrl("/api/memories")),
   ]);
-  const [records, albums, tags, locations] = await Promise.all([
+  const [records, albums, tags, locations, memories] = await Promise.all([
     filesResponse.json(),
     albumsResponse.json(),
     tagsResponse.json(),
     locationsResponse.json(),
+    memoriesResponse.json(),
   ]);
   state.files.clear();
   for (const record of records) {
@@ -392,6 +401,7 @@ async function restoreBackendIndex() {
   state.albums = albums;
   state.photoTags = tags;
   state.locations = locations;
+  state.memories = memories;
   populateYearFilter();
   if (records.length) {
     els.progressText.textContent = "Saved server index restored.";
@@ -1185,6 +1195,7 @@ function matchesCurrentGalleryFilters(fileRecord) {
     matchesPeople(fileRecord, state.currentView.terms || []) &&
     matchesSelectedAlbum(fileRecord) &&
     matchesLocationFilter(fileRecord) &&
+    matchesMemoryFilter(fileRecord) &&
     matchesDateFilters(fileRecord)
   );
 }
@@ -1333,6 +1344,11 @@ function matchesLocationFilter(fileRecord) {
   return true;
 }
 
+function matchesMemoryFilter(fileRecord) {
+  if (state.currentView.type !== "memory") return true;
+  return state.currentView.memoryPhotoIds?.has(fileRecord.id);
+}
+
 function matchesMediaFilter(fileRecord) {
   if (els.mediaFilter.value === "photos") return !isVideoRecord(fileRecord);
   if (els.mediaFilter.value === "videos") return isVideoRecord(fileRecord);
@@ -1430,6 +1446,7 @@ function renderPeople() {
 function renderCollections() {
   renderAlbumSuggestions();
   renderLocations();
+  renderMemories();
   renderCollectionButtons(els.albumList, state.albums, "No albums yet.", (album) => {
     state.currentView = {
       type: "album",
@@ -1444,6 +1461,57 @@ function renderCollections() {
     els.searchInput.value = tag.name;
     search();
   });
+}
+
+function renderMemories() {
+  els.memoryList.replaceChildren();
+  if (!state.memories.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty compact-empty";
+    empty.textContent = "Generate local memories from your indexed library.";
+    els.memoryList.append(empty);
+    return;
+  }
+
+  for (const memory of state.memories) {
+    const row = document.createElement("div");
+    row.className = "memory-row";
+
+    const button = document.createElement("button");
+    button.className = "memory-button";
+    button.type = "button";
+    button.innerHTML = `<strong></strong><span></span>`;
+    button.querySelector("strong").textContent = memory.title;
+    button.querySelector("span").textContent = memory.subtitle || `${memory.photoCount} files`;
+    button.addEventListener("click", () => showMemory(memory));
+
+    const dismissButton = document.createElement("button");
+    dismissButton.className = "memory-dismiss";
+    dismissButton.type = "button";
+    dismissButton.title = "Dismiss memory";
+    dismissButton.setAttribute("aria-label", `Dismiss ${memory.title}`);
+    dismissButton.textContent = "×";
+    dismissButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      dismissMemory(memory, dismissButton);
+    });
+
+    row.append(button, dismissButton);
+    els.memoryList.append(row);
+  }
+}
+
+function showMemory(memory) {
+  els.searchInput.value = "";
+  state.currentView = {
+    type: "memory",
+    memoryId: memory.id,
+    memoryPhotoIds: new Set(memory.photoIds || []),
+    title: `Memory: ${memory.title}`,
+    hint: memory.subtitle || `${memory.photoCount} files from this memory.`,
+    terms: [],
+  };
+  applyGalleryFilters();
 }
 
 function renderLocations() {
@@ -1720,6 +1788,47 @@ function renderCollectionButtons(container, items, emptyText, onClick) {
     button.querySelector("span").textContent = item.photoCount;
     button.addEventListener("click", () => onClick(item));
     container.append(button);
+  }
+}
+
+async function generateMemories() {
+  const activityId = startActivity("Generate memories");
+  els.generateMemoriesBtn.disabled = true;
+  try {
+    setBusy(true, "Generating memories...");
+    const payload = await postLibraryMutation("/api/memories/generate", {});
+    if (payload.memories) state.memories = payload.memories;
+    renderMemories();
+    const count = state.memories.length;
+    setProgress(`Generated ${count} local memor${count === 1 ? "y" : "ies"}.`, 100);
+    finishActivity(activityId, "done", `${count} memories`);
+  } catch (error) {
+    setProgress(error.message, 0);
+    finishActivity(activityId, "failed", error.message);
+  } finally {
+    els.generateMemoriesBtn.disabled = false;
+    setBusy(false);
+  }
+}
+
+async function dismissMemory(memory, button) {
+  const activityId = startActivity("Dismiss memory", memory.title);
+  button.disabled = true;
+  try {
+    const payload = await postLibraryMutation("/api/memories/dismiss", { memoryId: memory.id });
+    if (payload.memories) state.memories = payload.memories;
+    if (state.currentView.type === "memory" && state.currentView.memoryId === memory.id) {
+      showAll();
+    } else {
+      renderMemories();
+    }
+    setProgress(`Dismissed memory "${memory.title}".`, 100);
+    finishActivity(activityId, "done", memory.title);
+  } catch (error) {
+    setProgress(error.message, 0);
+    finishActivity(activityId, "failed", error.message);
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -2081,6 +2190,7 @@ function syncLibraryPayload(payload) {
   if (payload.albums) state.albums = payload.albums;
   if (payload.tags) state.photoTags = payload.tags;
   if (payload.locations) state.locations = payload.locations;
+  if (payload.memories) state.memories = payload.memories;
   populateYearFilter();
   updateStats();
 }
@@ -2342,6 +2452,7 @@ async function clearIndex() {
       state.albums = [];
       state.photoTags = [];
       state.locations = [];
+      state.memories = [];
       state.locationSuggestions.clear();
       state.openLocationNodes.clear();
       els.locationSuggestions.replaceChildren();

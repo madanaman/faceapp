@@ -24,6 +24,14 @@ class HttpHandlerContractTest(unittest.TestCase):
         self.assertIn("validate_restore_source", source)
         self.assertIn("restore_backup", source)
 
+    def test_local_memory_endpoints_are_available(self):
+        source = (ROOT / "backend" / "http_handler.py").read_text()
+        self.assertIn('parsed.path == "/api/memories"', source)
+        self.assertIn('parsed.path == "/api/memories/generate"', source)
+        self.assertIn('parsed.path == "/api/memories/dismiss"', source)
+        self.assertIn("generate_local_memories", source)
+        self.assertIn("database.dismiss_memory", source)
+
 
 if __name__ == "__main__":
     unittest.main()
