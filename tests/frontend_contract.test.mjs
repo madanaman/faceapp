@@ -57,7 +57,8 @@ test("gallery cards keep the enlarged photo lightbox with previous and next cont
   assert.match(html, /id="lightboxNext"/);
   assert.match(appJs, /function openLightbox\(/);
   assert.match(appJs, /function stepLightbox\(/);
-  assert.match(appJs, /mediaWrap\.addEventListener\("click", \(\) => openLightbox\(fileRecord\.id\)\)/);
+  assert.match(appJs, /mediaWrap\.addEventListener\("click", \(event\) => \{[\s\S]*openLightbox\(fileRecord\.id\)/);
+  assert.match(appJs, /infoButton\.addEventListener\("click", \(event\) => \{[\s\S]*openInspector\(fileRecord\.id\)/);
   assert.match(appJs, /createMediaElement\(fileRecord, \(\) => showMediaUnavailable\(mediaWrap, fileRecord\)\)/);
   assert.match(appJs, /function resetLightboxMedia\(\)/);
   assert.match(appJs, /els\.lightboxImage\.onerror = null/);
@@ -66,7 +67,7 @@ test("gallery cards keep the enlarged photo lightbox with previous and next cont
   assert.match(appJs, /function showLightboxMediaUnavailable\(fileRecord\)/);
   assert.match(appJs, /addEventListener\("error", onUnavailable, \{ once: true \}\)/);
   assert.match(styles, /\.media-unavailable\s*{/);
-  assert.match(styles, /\.media-unavailable\[hidden\]\s*{/);
+  assert.match(styles, /\[hidden\]\s*{[^}]*display: none !important;/s);
   assert.match(styles, /\.lightbox-frame \.media-unavailable\s*{/);
 });
 
@@ -85,8 +86,9 @@ test("gallery date filters and per-photo rescan controls stay wired", () => {
   assert.match(html, /id="monthFilter"/);
   assert.match(html, /id="dateFilter"/);
   assert.match(html, /id="sortDirection"/);
-  assert.match(html, /class="rescan-photo"/);
-  assert.match(html, /class="reset-ignored"/);
+  assert.match(html, /class="rescan-photo [^"]*"/);
+  assert.match(html, /class="reset-ignored [^"]*"/);
+  assert.match(html, /id="detailsInspector"/);
   assert.match(appJs, /function renderCurrentView\(/);
   assert.match(appJs, /function matchesDateFilters\(/);
   assert.match(appJs, /function rescanPhoto\(/);
@@ -95,12 +97,13 @@ test("gallery date filters and per-photo rescan controls stay wired", () => {
 test("scan controls let the user choose photos, videos, or both and bulk-assign an album", () => {
   assert.match(html, /id="pathInput" type="hidden"/);
   assert.doesNotMatch(html, /placeholder="\/Users\/you\/Pictures\/Photo Library"/);
-  assert.match(html, /id="pickFolderBtn" class="primary"[^>]*>Choose Folder<\/button>/);
+  assert.match(html, /id="pickFolderBtn" class="folder-picker"/);
+  assert.match(html, /<span>Choose folder<\/span>/);
   assert.match(html, /id="folderLabel">Choose a folder to start<\/span>/);
   assert.match(html, /id="scanMode"/);
   assert.match(html, /id="scanAlbumInput"/);
   assert.match(html, /id="scanLocationInput"/);
-  assert.match(html, /id="scanPathBtn" class="primary">Scan<\/button>/);
+  assert.match(html, /id="scanPathBtn" class="primary scan-submit"[^>]*>Start scan<\/button>/);
   assert.match(html, /id="locationSuggestions"/);
   assert.match(html, /id="albumSuggestions"/);
   assert.match(html, /value="photos"/);
@@ -124,9 +127,9 @@ test("video records can render in the gallery and lightbox", () => {
 });
 
 test("gallery can filter photos versus videos and hides video preview face boxes", () => {
-  assert.match(html, /value="both">Photos and videos/);
-  assert.match(html, /value="photos">Photos only/);
-  assert.match(html, /value="videos">Videos only/);
+  assert.match(html, /value="both">All media/);
+  assert.match(html, /value="photos">Photos/);
+  assert.match(html, /value="videos">Videos/);
   assert.match(html, /id="showNoFaceVideos"/);
   assert.match(appJs, /mediaFilter: document\.querySelector\("#mediaFilter"\)/);
   assert.match(appJs, /showNoFaceVideos: document\.querySelector\("#showNoFaceVideos"\)/);
@@ -135,7 +138,8 @@ test("gallery can filter photos versus videos and hides video preview face boxes
   assert.match(appJs, /displayFaces\(fileRecord\)\.length > 0/);
   assert.match(appJs, /\.filter\(matchesMediaFilter\)/);
   assert.match(appJs, /\.filter\(matchesVisibleVideoFaces\)/);
-  assert.match(appJs, /if \(!isVideoRecord\(fileRecord\)\) \{\s*mediaWrap\.append\(renderFaceBox/s);
+  assert.doesNotMatch(appJs, /mediaWrap\.append\(renderFaceBox/);
+  assert.match(html, /class="photo-info-button"/);
 });
 
 test("video face rows collapse repeated tagged names and paths are shortened for display", () => {
@@ -145,7 +149,7 @@ test("video face rows collapse repeated tagged names and paths are shortened for
   assert.match(appJs, /function displayFolderName\(/);
   assert.match(appJs, /parts\.slice\(-3\)\.join\(" \/ "\)/);
   assert.match(appJs, /path\.title = fileRecord\.path/);
-  assert.match(styles, /#folderLabel\s*{[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap;/s);
+  assert.match(styles, /\.popover-head span\s*{[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap;/s);
 });
 
 test("face thumbnails from backend media paths render without recropping video faces", () => {
@@ -173,13 +177,14 @@ test("activity panel tracks running and recent background actions", () => {
 
 test("face list supports scrolling and bulk removal", () => {
   assert.match(html, /class="bulk-face-actions"/);
-  assert.match(html, /class="bulk-remove-face"/);
+  assert.match(html, /class="bulk-remove-face [^"]*"/);
   assert.match(html, /class="face-select"/);
   assert.match(appJs, /const MIN_VIDEO_FACE_APPEARANCES = 2/);
   assert.match(appJs, /function bulkRemoveFaces\(/);
   assert.match(appJs, /selectedFaces = new Map\(\)/);
   assert.match(appJs, /ignoreFaceIds\(fileRecord, faceIds\)/);
   assert.match(appJs, /function isLikelyMainVideoFace\(/);
+  assert.match(styles, /\.faces\s*{[^}]*max-height: 340px;[^}]*overflow-y: auto;/s);
 });
 
 test("tag editor targets the text input, not the bulk-select checkbox", () => {
@@ -236,7 +241,7 @@ test("albums and descriptive photo tags are available from the gallery", () => {
   assert.match(appJs, /fetch\(apiUrl\("\/api\/albums"\)\)/);
   assert.match(appJs, /fetch\(apiUrl\("\/api\/photo-tags"\)\)/);
   assert.match(appJs, /postLibraryMutation\("\/api\/albums\/photos"/);
-  assert.match(appJs, /albumSelect\.addEventListener\("change", \(\) => addPhotoToAlbum\(fileRecord, albumSelect\)\)/);
+  assert.match(appJs, /albumSelect\.onchange = \(\) => addPhotoToAlbum\(fileRecord, albumSelect\)/);
   assert.match(appJs, /className = "remove-collection-chip"/);
   assert.match(appJs, /deleteLibraryMutation\("\/api\/albums\/photos"/);
   assert.match(appJs, /postLibraryMutation\("\/api\/photos\/tags"/);
@@ -245,7 +250,7 @@ test("albums and descriptive photo tags are available from the gallery", () => {
 });
 
 test("local memories can be generated dismissed and opened in the gallery", () => {
-  assert.match(html, /<h2>Memories<\/h2>/);
+  assert.match(html, /<span>Memories<\/span>/);
   assert.match(html, /id="generateMemoriesBtn"/);
   assert.match(html, /id="memoryList"/);
   assert.match(appJs, /memories: \[\]/);
@@ -265,13 +270,14 @@ test("local memories can be generated dismissed and opened in the gallery", () =
   assert.match(styles, /\.memory-row\s*{/);
 });
 
-test("photo cards collapse faces and organize controls by default", () => {
-  assert.match(html, /class="card-section faces-section"/);
-  assert.match(html, /class="card-section organize-section"/);
-  assert.match(html, /<summary>Faces<\/summary>/);
-  assert.match(html, /<summary>Organize<\/summary>/);
+test("photo cards stay photo-first while the inspector owns editing controls", () => {
+  assert.match(html, /id="detailsInspector" class="details-inspector"/);
+  assert.match(html, /class="inspector-section faces-section"/);
+  assert.match(html, /class="inspector-section organize-section"/);
+  assert.match(html, /class="photo-info-button"/);
   assert.match(html, /class="photo-badges"/);
   assert.match(html, /class="face-summary"/);
+  assert.match(appJs, /function openInspector\(fileId\)/);
   assert.match(appJs, /facesSection\.open = visibleFaces\.some\(\(face\) => !normalizeName\(face\.tag\)\)/);
   assert.match(appJs, /function formatFaceSummary\(fileRecord, visibleFaces\)/);
 });
@@ -279,7 +285,7 @@ test("photo cards collapse faces and organize controls by default", () => {
 test("locations can be browsed resolved and edited from the UI", () => {
   assert.match(html, /id="locationToggle"/);
   assert.match(html, /aria-label="Browse locations"/);
-  assert.match(html, /<svg viewBox="0 0 24 24" aria-hidden="true">/);
+  assert.match(html, /data-lucide="globe-2"/);
   assert.match(html, /id="locationPanel"/);
   assert.match(html, /id="locationList"/);
   assert.match(html, /id="resolveLocationsBtn"/);
@@ -301,8 +307,30 @@ test("locations can be browsed resolved and edited from the UI", () => {
   assert.match(appJs, /postLibraryMutation\("\/api\/locations\/resolve"/);
   assert.match(appJs, /postLibraryMutation\("\/api\/photos\/location"/);
   assert.match(appJs, /deleteLibraryMutation\("\/api\/photos\/location"/);
-  assert.match(styles, /\.location-panel\s*{[^}]*position: absolute;[^}]*width: min\(380px, calc\(100vw - 40px\)\);/s);
+  assert.match(styles, /\.popover\s*{[^}]*position: absolute;/s);
+  assert.match(styles, /\.location-panel\s*{[^}]*width: min\(380px, calc\(100vw - 40px\)\);/s);
   assert.match(styles, /\.location-list\s*{[^}]*max-height: 188px;[^}]*overflow-y: auto;/s);
+});
+
+test("adaptive theme controls persist system dark and light choices", () => {
+  assert.match(html, /<html lang="en" data-theme="system">/);
+  assert.match(html, /id="themeToggle"/);
+  assert.match(html, /data-theme-value="system"/);
+  assert.match(html, /data-theme-value="dark"/);
+  assert.match(html, /data-theme-value="light"/);
+  assert.match(appJs, /const THEME_STORAGE_KEY = "local-face-theme"/);
+  assert.match(appJs, /function setTheme\(theme, \{ persist = true, close = true \} = \{\}\)/);
+  assert.match(appJs, /document\.documentElement\.dataset\.theme = nextTheme/);
+  assert.match(styles, /html\[data-theme="light"\]/);
+  assert.match(styles, /@media \(prefers-color-scheme: light\)/);
+});
+
+test("redesign uses bundled fonts and local icons without network dependencies", () => {
+  assert.match(styles, /font-family: "Inter"/);
+  assert.match(styles, /font-family: "Plus Jakarta Sans"/);
+  assert.match(styles, /\.\/assets\/fonts\/inter-latin-400-normal\.woff2/);
+  assert.match(html, /src="\.\/assets\/vendor\/lucide\.min\.js"/);
+  assert.doesNotMatch(html, /https?:\/\//);
 });
 
 test("clear index resets frontend location state", () => {

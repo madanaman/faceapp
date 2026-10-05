@@ -11,6 +11,7 @@ check:
 desktop-assets:
 	mkdir -p desktop
 	cp index.html styles.css app.js desktop/
+	cp -R assets desktop/
 
 desktop-backend:
 	$(PYTHON_BIN) scripts/desktop_build.py

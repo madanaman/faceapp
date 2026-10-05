@@ -1,299 +1,397 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="system">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
     <title>Local Face Photos</title>
+    <script>
+      (() => {
+        const savedTheme = localStorage.getItem("local-face-theme");
+        document.documentElement.dataset.theme = ["system", "dark", "light"].includes(savedTheme)
+          ? savedTheme
+          : "system";
+      })();
+    </script>
     <link rel="stylesheet" href="./styles.css">
+    <script src="./assets/vendor/lucide.min.js" defer></script>
   </head>
   <body>
     <header class="topbar">
-      <div>
-        <p class="eyebrow">Local-first photo search</p>
-        <h1>Face Library</h1>
+      <div class="brand-zone">
+        <button id="navCollapseBtn" class="icon-button subtle" type="button" aria-label="Collapse navigation" title="Collapse navigation">
+          <i data-lucide="panel-left-close"></i>
+        </button>
+        <span class="brand-mark" aria-hidden="true"><i data-lucide="scan-face"></i></span>
+        <span class="brand-name">Face Library</span>
       </div>
-      <div class="actions">
-        <button id="clearDbBtn" class="ghost" type="button">Clear Index</button>
+
+      <div class="global-search">
+        <label class="sr-only" for="searchInput">Search library</label>
+        <i data-lucide="search" aria-hidden="true"></i>
+        <input id="searchInput" type="search" placeholder="Search people, places, albums, tags, or dates">
+        <button id="searchBtn" class="icon-button subtle" type="button" aria-label="Search" title="Search">
+          <i data-lucide="arrow-right"></i>
+        </button>
+        <button id="locationToggle" class="icon-button subtle" type="button" aria-label="Browse locations" aria-expanded="false" aria-controls="locationPanel" title="Browse locations">
+          <i data-lucide="globe-2"></i>
+        </button>
+        <div id="locationPanel" class="popover location-panel" hidden>
+          <div class="popover-head">
+            <div>
+              <strong>Locations</strong>
+              <span>Browse the places in your library</span>
+            </div>
+            <button id="locationClose" class="icon-button subtle" type="button" aria-label="Close locations" title="Close">
+              <i data-lucide="x"></i>
+            </button>
+          </div>
+          <div id="locationList" class="location-list"></div>
+          <button id="resolveLocationsBtn" class="secondary compact" type="button">
+            <i data-lucide="map-pinned"></i>
+            Name GPS places
+          </button>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <div class="activity-anchor">
+          <button id="activityToggle" class="icon-button" type="button" aria-label="Recent activity" aria-expanded="false" aria-controls="activityPanel" title="Recent activity">
+            <i data-lucide="activity"></i>
+            <span class="activity-indicator" aria-hidden="true"></span>
+            <span class="sr-only activity-label">Activity: Idle</span>
+          </button>
+          <div id="activityPanel" class="popover activity-popover" hidden>
+            <div class="popover-head">
+              <div>
+                <strong>Recent activity</strong>
+                <span>Latest scans and library changes</span>
+              </div>
+              <button id="activityClose" class="icon-button subtle" type="button" aria-label="Close activity" title="Close">
+                <i data-lucide="x"></i>
+              </button>
+            </div>
+            <ol id="activityList" class="activity-list" aria-live="polite"></ol>
+          </div>
+        </div>
+
+        <div class="scan-anchor">
+          <button id="scanPanelToggle" class="primary top-command" type="button" aria-expanded="false" aria-controls="scanPanel">
+            <i data-lucide="folder-search"></i>
+            <span>Scan folder</span>
+          </button>
+          <div id="scanPanel" class="popover scan-panel" hidden>
+            <div class="popover-head">
+              <div>
+                <strong>Scan local media</strong>
+                <span id="folderLabel">Choose a folder to start</span>
+              </div>
+              <span id="supportBadge" class="engine-status">Checking engine</span>
+            </div>
+            <input id="pathInput" type="hidden">
+            <button id="pickFolderBtn" class="folder-picker" type="button" hidden>
+              <i data-lucide="folder-open"></i>
+              <span>Choose folder</span>
+            </button>
+            <div class="scan-options">
+              <label for="scanMode">
+                <span>Media</span>
+                <select id="scanMode">
+                  <option value="photos">Photos</option>
+                  <option value="videos">Videos</option>
+                  <option value="both">Photos and videos</option>
+                </select>
+              </label>
+              <label for="scanAlbumInput">
+                <span>Album</span>
+                <input id="scanAlbumInput" type="text" placeholder="Optional album" list="albumSuggestions">
+              </label>
+              <label for="scanLocationInput" class="scan-location-field">
+                <span>Location</span>
+                <input id="scanLocationInput" type="text" placeholder="Optional location" list="locationSuggestions">
+              </label>
+            </div>
+            <button id="scanPathBtn" class="primary scan-submit" type="button">Start scan</button>
+          </div>
+        </div>
+
+        <div class="theme-anchor">
+          <button id="themeToggle" class="icon-button" type="button" aria-label="Appearance" aria-expanded="false" aria-controls="themePanel" title="Appearance">
+            <i data-lucide="moon-star"></i>
+          </button>
+          <div id="themePanel" class="popover theme-panel" hidden>
+            <strong>Appearance</strong>
+            <div class="theme-options" role="group" aria-label="Color theme">
+              <button type="button" data-theme-value="system"><i data-lucide="monitor"></i><span>System</span></button>
+              <button type="button" data-theme-value="dark"><i data-lucide="moon"></i><span>Dark</span></button>
+              <button type="button" data-theme-value="light"><i data-lucide="sun"></i><span>Light</span></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-anchor">
+          <button id="settingsToggle" class="icon-button" type="button" aria-label="Library settings" aria-expanded="false" aria-controls="settingsPanel" title="Library settings">
+            <i data-lucide="settings-2"></i>
+          </button>
+          <div id="settingsPanel" class="popover settings-panel" hidden>
+            <div class="popover-head">
+              <div>
+                <strong>Library settings</strong>
+                <span>Protect or reset the local index</span>
+              </div>
+            </div>
+            <div class="library-maintenance" aria-label="Backup and restore">
+              <div class="maintenance-actions" role="group" aria-label="Library maintenance mode">
+                <button id="libraryBackupMode" class="secondary compact" type="button" aria-expanded="false" aria-controls="backupPanel">
+                  <i data-lucide="archive"></i>Backup
+                </button>
+                <button id="libraryRestoreMode" class="secondary compact" type="button" aria-expanded="false" aria-controls="restorePanel">
+                  <i data-lucide="archive-restore"></i>Restore
+                </button>
+              </div>
+              <div id="backupPanel" class="maintenance-panel" hidden>
+                <button id="chooseBackupFolderBtn" class="secondary compact" type="button">Choose backup folder</button>
+                <label class="library-check" for="includeMediaBackup">
+                  <input id="includeMediaBackup" type="checkbox">
+                  Include original media
+                </label>
+                <button id="backupBtn" class="primary compact" type="button" disabled>Back up now</button>
+                <span id="backupFolderLabel" class="library-folder">No backup folder selected</span>
+              </div>
+              <div id="restorePanel" class="maintenance-panel" hidden>
+                <button id="chooseRestoreFolderBtn" class="secondary compact" type="button">Choose restore folder</button>
+                <button id="restoreBtn" class="primary compact" type="button" disabled>Restore</button>
+                <span id="restoreFolderLabel" class="library-folder">No restore folder selected</span>
+              </div>
+              <div class="backup-feedback">
+                <p id="backupStatus" class="backup-status">Choose Backup or Restore when needed.</p>
+                <button id="backupWarningsToggle" class="warning-link" type="button" hidden aria-expanded="false" aria-controls="backupWarningsPanel">View warnings</button>
+                <div id="backupWarningsPanel" class="backup-warnings" hidden>
+                  <ul id="backupWarningsList"></ul>
+                </div>
+              </div>
+            </div>
+            <button id="clearDbBtn" class="danger-text settings-danger" type="button">
+              <i data-lucide="trash-2"></i>
+              Clear index
+            </button>
+          </div>
+        </div>
       </div>
     </header>
 
-    <main>
-      <section class="control-band">
-        <div class="folder-state">
-          <span id="supportBadge" class="badge">Checking local engine</span>
-          <span id="folderLabel">Choose a folder to start</span>
-        </div>
-        <div class="path-row">
-          <input id="pathInput" type="hidden">
-          <button id="pickFolderBtn" class="primary" type="button" hidden>Choose Folder</button>
-          <label class="scan-label" for="scanMode">
-            Scan
-            <select id="scanMode">
-              <option value="photos">Photos</option>
-              <option value="videos">Videos</option>
-              <option value="both">Both</option>
-            </select>
-          </label>
-          <label class="scan-album-label" for="scanAlbumInput">
-            Album
-            <input id="scanAlbumInput" type="text" placeholder="Optional album" list="albumSuggestions">
-          </label>
-          <label class="scan-location-label" for="scanLocationInput">
-            Location
-            <input id="scanLocationInput" type="text" placeholder="Delhi, India" list="locationSuggestions">
-          </label>
-          <button id="scanPathBtn" class="primary">Scan</button>
-        </div>
-        <div class="search-row">
-          <label for="searchInput">Search library</label>
-          <input id="searchInput" type="search" placeholder="Aman, Ironman Malaysia or photos of Aman from 2022">
-          <button id="searchBtn">Search</button>
-          <button id="locationToggle" class="icon-button" type="button" aria-label="Browse locations" aria-expanded="false" aria-controls="locationPanel" title="Browse locations">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="9"></circle>
-              <path d="M3 12h18"></path>
-              <path d="M12 3a14 14 0 0 1 0 18"></path>
-              <path d="M12 3a14 14 0 0 0 0 18"></path>
-            </svg>
+    <div class="app-shell">
+      <aside class="library-sidebar" aria-label="Library navigation">
+        <nav class="library-nav">
+          <p class="nav-label">Library</p>
+          <button id="showAllBtn" class="nav-item active" type="button">
+            <i data-lucide="images"></i><span>All media</span><small id="fileCount">0</small>
           </button>
-          <div id="locationPanel" class="location-panel" hidden>
-            <div class="location-head">
-              <strong>Locations</strong>
-              <div>
-                <button id="resolveLocationsBtn" class="mini" type="button">Name GPS places</button>
-                <button id="locationClose" class="mini ghost" type="button">Close</button>
-              </div>
-            </div>
-            <div id="locationList" class="location-list"></div>
-          </div>
-          <button id="showAllBtn" class="ghost">Show All</button>
-        </div>
-        <div class="library-maintenance" aria-label="Backup and restore">
-          <div class="maintenance-head">
-            <strong>Backup &amp; Restore</strong>
-            <div class="maintenance-actions">
-              <button id="libraryBackupMode" class="mini ghost" type="button" aria-expanded="false" aria-controls="backupPanel">Backup</button>
-              <button id="libraryRestoreMode" class="mini ghost" type="button" aria-expanded="false" aria-controls="restorePanel">Restore</button>
-            </div>
-          </div>
-          <div id="backupPanel" class="maintenance-panel" hidden>
-            <button id="chooseBackupFolderBtn" class="mini" type="button">Choose backup folder</button>
-            <label class="library-check" for="includeMediaBackup">
-              <input id="includeMediaBackup" type="checkbox">
-              Include original media
-            </label>
-            <button id="backupBtn" class="mini primary" type="button" disabled>Back up now</button>
-            <span id="backupFolderLabel" class="library-folder">No backup folder selected</span>
-          </div>
-          <div id="restorePanel" class="maintenance-panel" hidden>
-            <button id="chooseRestoreFolderBtn" class="mini" type="button">Choose restore folder</button>
-            <button id="restoreBtn" class="mini primary" type="button" disabled>Restore</button>
-            <span id="restoreFolderLabel" class="library-folder">No restore folder selected</span>
-          </div>
-          <div class="backup-feedback">
-            <p id="backupStatus" class="backup-status">Choose Backup or Restore when you need to protect or recover the local library.</p>
-            <button id="backupWarningsToggle" class="warning-link" type="button" hidden aria-expanded="false" aria-controls="backupWarningsPanel">View warnings</button>
-            <div id="backupWarningsPanel" class="backup-warnings" hidden>
-              <ul id="backupWarningsList"></ul>
-            </div>
-          </div>
-        </div>
-      </section>
+          <button id="untaggedBtn" class="nav-item" type="button">
+            <i data-lucide="scan-face"></i><span>Untagged</span><small id="untaggedCount">0</small>
+          </button>
 
-      <section class="stats-grid" aria-label="Index statistics">
-        <article>
-          <span id="fileCount">0</span>
-          <p>files scanned</p>
-        </article>
-        <article>
-          <span id="faceCount">0</span>
-          <p>faces found</p>
-        </article>
-        <article>
-          <span id="tagCount">0</span>
-          <p>people tagged</p>
-        </article>
-        <article>
-          <span id="matchCount">0</span>
-          <p>current matches</p>
-        </article>
-      </section>
-
-      <section class="progress-wrap" aria-live="polite">
-        <div class="progress-info">
-          <span id="progressText">Choose a folder to begin.</span>
-          <span class="progress-actions">
-            <span id="progressPercent"></span>
-            <button id="activityToggle" class="activity-link" type="button" aria-expanded="false" aria-controls="activityPanel">Activity: Idle</button>
-          </span>
-        </div>
-        <progress id="scanProgress" max="100" value="0"></progress>
-        <div id="activityPanel" class="activity-popover" hidden>
-          <div class="activity-head">
-            <strong>Recent activity</strong>
-            <button id="activityClose" class="mini ghost" type="button">Close</button>
-          </div>
-          <ol id="activityList" class="activity-list" aria-live="polite"></ol>
-        </div>
-      </section>
-
-      <section class="workspace">
-        <aside>
-          <section class="side-section">
-            <div class="panel-title">
-              <h2>People</h2>
-              <button id="untaggedBtn" class="mini">Untagged</button>
-            </div>
-            <div id="peopleList" class="people-list"></div>
-          </section>
-          <section class="side-section">
-            <div class="panel-title">
-              <h2>Albums</h2>
-            </div>
+          <p class="nav-label discover-label">Discover</p>
+          <details class="nav-group" open>
+            <summary><i data-lucide="users"></i><span>People</span><i data-lucide="chevron-down" class="chevron"></i></summary>
+            <div id="peopleList" class="people-list nav-collection"></div>
+          </details>
+          <details class="nav-group">
+            <summary><i data-lucide="album"></i><span>Albums</span><i data-lucide="chevron-down" class="chevron"></i></summary>
             <div class="collection-create">
-              <input id="albumNameInput" type="text" placeholder="Malaysia Trip">
-              <button id="createAlbumBtn" class="mini" type="button">Add</button>
+              <input id="albumNameInput" type="text" placeholder="New album">
+              <button id="createAlbumBtn" class="icon-button compact" type="button" aria-label="Create album" title="Create album"><i data-lucide="plus"></i></button>
             </div>
-            <div id="albumList" class="people-list"></div>
-          </section>
-          <section class="side-section">
-            <div class="panel-title">
-              <h2>Photo Tags</h2>
-            </div>
-            <div id="photoTagList" class="people-list"></div>
-          </section>
-          <section class="side-section">
-            <div class="panel-title">
-              <h2>Memories</h2>
-              <button id="generateMemoriesBtn" class="mini">Generate</button>
-            </div>
-            <div id="memoryList" class="memory-list"></div>
-          </section>
-        </aside>
+            <div id="albumList" class="people-list nav-collection"></div>
+          </details>
+          <details class="nav-group">
+            <summary><i data-lucide="tags"></i><span>Photo tags</span><i data-lucide="chevron-down" class="chevron"></i></summary>
+            <div id="photoTagList" class="people-list nav-collection"></div>
+          </details>
+          <details class="nav-group">
+            <summary><i data-lucide="sparkles"></i><span>Memories</span><i data-lucide="chevron-down" class="chevron"></i></summary>
+            <button id="generateMemoriesBtn" class="secondary compact sidebar-command" type="button">
+              <i data-lucide="wand-sparkles"></i>Generate memories
+            </button>
+            <div id="memoryList" class="memory-list nav-collection"></div>
+          </details>
+        </nav>
 
-        <section class="gallery-shell">
-          <div class="panel-title">
-            <h2 id="galleryTitle">Matches</h2>
+        <div class="sidebar-footer">
+          <div class="library-path">
+            <i data-lucide="folder"></i>
+            <span id="sidebarFolderLabel">No folder selected</span>
+          </div>
+          <dl class="library-stats" aria-label="Index statistics">
+            <div><dt>Faces</dt><dd id="faceCount">0</dd></div>
+            <div><dt>People</dt><dd id="tagCount">0</dd></div>
+            <div><dt>Matches</dt><dd id="matchCount">0</dd></div>
+          </dl>
+        </div>
+      </aside>
+
+      <main class="gallery-shell">
+        <div class="gallery-head">
+          <div class="gallery-title-block">
+            <h1 id="galleryTitle">All Indexed Files</h1>
             <span id="galleryHint">Separate people, albums, and photo tags with commas. All terms must match.</span>
           </div>
           <div class="gallery-toolbar" aria-label="Gallery filters">
-            <label>
-              Type
-              <select id="mediaFilter">
-                <option value="both">Photos and videos</option>
-                <option value="photos">Photos only</option>
-                <option value="videos">Videos only</option>
+            <label class="compact-select" for="mediaFilter">
+              <i data-lucide="images"></i>
+              <select id="mediaFilter" aria-label="Media type">
+                <option value="both">All media</option>
+                <option value="photos">Photos</option>
+                <option value="videos">Videos</option>
               </select>
             </label>
-            <label class="inline-filter">
-              <input id="showNoFaceVideos" type="checkbox">
-              Show no-face videos
-            </label>
-            <label>
-              Year
-              <select id="yearFilter">
-                <option value="">Any</option>
+            <label class="compact-select" for="sortDirection">
+              <select id="sortDirection" aria-label="Sort order">
+                <option value="desc">Newest</option>
+                <option value="asc">Oldest</option>
               </select>
+              <i data-lucide="chevron-down"></i>
             </label>
-            <label>
-              Month
-              <select id="monthFilter">
-                <option value="">Any</option>
-                <option value="01">Jan</option>
-                <option value="02">Feb</option>
-                <option value="03">Mar</option>
-                <option value="04">Apr</option>
-                <option value="05">May</option>
-                <option value="06">Jun</option>
-                <option value="07">Jul</option>
-                <option value="08">Aug</option>
-                <option value="09">Sep</option>
-                <option value="10">Oct</option>
-                <option value="11">Nov</option>
-                <option value="12">Dec</option>
-              </select>
-            </label>
-            <label>
-              Date
-              <input id="dateFilter" type="date">
-            </label>
-            <label>
-              Sort
-              <select id="sortDirection">
-                <option value="desc">Newest first</option>
-                <option value="asc">Oldest first</option>
-              </select>
-            </label>
+            <div class="filters-anchor">
+              <button id="filtersToggle" class="secondary compact" type="button" aria-expanded="false" aria-controls="filtersPanel">
+                <i data-lucide="sliders-horizontal"></i>
+                Filters
+                <span id="filterCount" class="filter-count" hidden>0</span>
+              </button>
+              <div id="filtersPanel" class="popover filters-panel" hidden>
+                <div class="popover-head">
+                  <div><strong>Gallery filters</strong><span>Narrow the current collection</span></div>
+                  <button id="filtersReset" class="text-button" type="button">Reset</button>
+                </div>
+                <label class="field-label" for="yearFilter">Year
+                  <select id="yearFilter"><option value="">Any year</option></select>
+                </label>
+                <label class="field-label" for="monthFilter">Month
+                  <select id="monthFilter">
+                    <option value="">Any month</option>
+                    <option value="01">January</option><option value="02">February</option><option value="03">March</option>
+                    <option value="04">April</option><option value="05">May</option><option value="06">June</option>
+                    <option value="07">July</option><option value="08">August</option><option value="09">September</option>
+                    <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+                  </select>
+                </label>
+                <label class="field-label" for="dateFilter">Exact date
+                  <input id="dateFilter" type="date">
+                </label>
+                <label class="switch-row" for="showNoFaceVideos">
+                  <input id="showNoFaceVideos" type="checkbox">
+                  <span>Show videos without detected faces</span>
+                </label>
+              </div>
+            </div>
           </div>
-          <div id="gallery" class="gallery"></div>
+        </div>
+
+        <section class="progress-wrap" aria-live="polite">
+          <div class="progress-info">
+            <span id="progressText">Choose a folder to begin.</span>
+            <span id="progressPercent"></span>
+          </div>
+          <progress id="scanProgress" max="100" value="0"></progress>
         </section>
-      </section>
-    </main>
+
+        <div id="gallery" class="gallery"></div>
+      </main>
+
+      <aside id="detailsInspector" class="details-inspector" aria-label="Photo details" aria-hidden="true">
+        <div class="inspector-head">
+          <div><strong>Photo details</strong><span>Organize and identify</span></div>
+          <button id="inspectorClose" class="icon-button subtle" type="button" aria-label="Close photo details" title="Close">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <div id="inspectorEmpty" class="inspector-empty">
+          <i data-lucide="panel-right"></i>
+          <strong>No photo selected</strong>
+          <span>Use the info button on a photo to view its details.</span>
+        </div>
+        <div id="inspectorContent" class="inspector-content" hidden>
+          <div id="inspectorMedia" class="inspector-media"></div>
+          <div class="inspector-title">
+            <strong id="inspectorName"></strong>
+            <span id="inspectorMeta"></span>
+          </div>
+          <details class="inspector-section faces-section">
+            <summary><span><i data-lucide="scan-face"></i>People</span><span id="inspectorFaceSummary"></span></summary>
+            <div class="bulk-face-actions" hidden>
+              <span class="bulk-face-count">0 selected</span>
+              <button class="bulk-remove-face danger" type="button">Remove selected</button>
+            </div>
+            <div class="faces"></div>
+          </details>
+          <details class="inspector-section organize-section">
+            <summary><span><i data-lucide="tags"></i>Organization</span></summary>
+            <div class="photo-tag-chips"></div>
+            <div class="organize-fields">
+              <label for="inspectorAlbumSelect">Album
+                <select id="inspectorAlbumSelect" class="album-select" aria-label="Add photo to album"></select>
+              </label>
+              <label for="inspectorTagInput">Photo tag
+                <span class="inline-input">
+                  <input id="inspectorTagInput" class="custom-tag-input" type="text" placeholder="Aman's first birthday">
+                  <button class="add-custom-tag icon-button compact" type="button" aria-label="Add photo tag" title="Add photo tag"><i data-lucide="plus"></i></button>
+                </span>
+              </label>
+              <label for="inspectorLocationInput">Location
+                <input id="inspectorLocationInput" class="location-input" type="text" placeholder="Delhi, India" list="locationSuggestions">
+              </label>
+              <div class="location-actions">
+                <button class="save-location secondary compact" type="button">Save location</button>
+                <button class="remove-location text-button danger-text" type="button">Remove</button>
+              </div>
+            </div>
+          </details>
+          <details class="inspector-section">
+            <summary><span><i data-lucide="wrench"></i>Face tools</span></summary>
+            <div class="photo-actions">
+              <button class="rescan-photo secondary compact" type="button"><i data-lucide="refresh-cw"></i>Rescan faces</button>
+              <button class="reset-ignored secondary compact" type="button"><i data-lucide="rotate-ccw"></i>Reset ignored</button>
+            </div>
+          </details>
+          <details class="inspector-section metadata-section" open>
+            <summary><span><i data-lucide="info"></i>Metadata</span></summary>
+            <dl id="inspectorMetadata"></dl>
+          </details>
+        </div>
+      </aside>
+    </div>
 
     <div id="lightbox" class="lightbox" aria-hidden="true">
-      <button id="lightboxClose" class="lightbox-close" type="button" aria-label="Close viewer">×</button>
-      <button id="lightboxPrev" class="lightbox-nav lightbox-prev" type="button" aria-label="Previous photo">‹</button>
+      <button id="lightboxClose" class="lightbox-close" type="button" aria-label="Close viewer"><i data-lucide="x"></i></button>
+      <button id="lightboxPrev" class="lightbox-nav lightbox-prev" type="button" aria-label="Previous photo"><i data-lucide="chevron-left"></i></button>
       <figure class="lightbox-frame">
         <img id="lightboxImage" alt="">
         <video id="lightboxVideo" controls playsinline></video>
         <div id="lightboxUnavailable" class="media-unavailable" hidden>
+          <i data-lucide="image-off"></i>
           <strong>Media unavailable</strong>
           <span>The file could not be opened from its saved path.</span>
         </div>
-        <figcaption>
-          <strong id="lightboxName"></strong>
-          <span id="lightboxMeta"></span>
-        </figcaption>
+        <figcaption><strong id="lightboxName"></strong><span id="lightboxMeta"></span></figcaption>
       </figure>
-      <button id="lightboxNext" class="lightbox-nav lightbox-next" type="button" aria-label="Next photo">›</button>
+      <button id="lightboxNext" class="lightbox-nav lightbox-next" type="button" aria-label="Next photo"><i data-lucide="chevron-right"></i></button>
     </div>
 
     <div id="busyOverlay" class="busy-overlay" aria-hidden="true" role="status">
-      <div class="busy-panel">
-        <span class="busy-spinner"></span>
-        <strong id="busyText">Applying changes...</strong>
-      </div>
+      <div class="busy-panel"><span class="busy-spinner"></span><strong id="busyText">Applying changes...</strong></div>
     </div>
 
     <template id="photoTemplate">
       <article class="photo-card">
-        <div class="media-wrap"></div>
-        <div class="photo-meta">
-          <strong class="file-name"></strong>
-          <span class="file-path"></span>
-          <div class="photo-badges"></div>
-          <span class="face-summary"></span>
+        <div class="media-wrap">
+          <button class="photo-info-button" type="button" aria-label="Open photo details" title="Photo details"><i data-lucide="info"></i></button>
+          <div class="photo-overlay">
+            <strong class="file-name"></strong>
+            <span class="file-path"></span>
+            <span class="face-summary"></span>
+          </div>
         </div>
-        <details class="card-section faces-section">
-          <summary>Faces</summary>
-          <div class="bulk-face-actions" hidden>
-            <span class="bulk-face-count">0 selected</span>
-            <button class="bulk-remove-face" type="button">Remove selected</button>
-          </div>
-          <div class="faces"></div>
-        </details>
-        <details class="card-section organize-section">
-          <summary>Organize</summary>
-          <div class="photo-actions">
-            <button class="rescan-photo" type="button">Rescan faces</button>
-            <button class="reset-ignored" type="button">Reset ignored</button>
-          </div>
-          <div class="photo-collections">
-            <div class="photo-tag-chips"></div>
-            <div class="photo-collection-row">
-              <select class="album-select" aria-label="Add photo to album"></select>
-            </div>
-            <div class="photo-collection-row">
-              <input class="custom-tag-input" type="text" placeholder="Aman's first birthday">
-              <button class="add-custom-tag mini" type="button">Add tag</button>
-            </div>
-            <div class="location-editor">
-              <input class="location-input" type="text" placeholder="Delhi, India" list="locationSuggestions">
-              <button class="save-location mini" type="button">Save location</button>
-              <button class="remove-location mini ghost" type="button">Remove</button>
-            </div>
-          </div>
-        </details>
+        <div class="photo-badges"></div>
       </article>
     </template>
 
@@ -305,7 +403,7 @@
           <input type="text" placeholder="Tag name" list="personSuggestions">
           <span class="face-extra"></span>
         </div>
-        <button type="button" class="remove-face-btn" aria-label="Remove face" title="Remove face">−</button>
+        <button type="button" class="remove-face-btn" aria-label="Remove face" title="Remove face"><i data-lucide="minus"></i></button>
       </div>
     </template>
 

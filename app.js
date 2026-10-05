@@ -4,6 +4,8 @@ const STORE = "files";
 const GALLERY_BATCH_SIZE = 50;
 const ACTIVITY_LIMIT = 10;
 const MIN_VIDEO_FACE_APPEARANCES = 2;
+const THEME_STORAGE_KEY = "local-face-theme";
+const THEMES = new Set(["system", "dark", "light"]);
 const VIDEO_TYPES = new Set(["video/mp4", "video/webm", "video/quicktime", "video/x-m4v", "video/x-msvideo"]);
 const MONTH_LABELS = {
   "01": "January",
@@ -34,6 +36,7 @@ const state = {
   galleryCursor: 0,
   galleryObserver: null,
   lightboxIndex: 0,
+  selectedFileId: "",
   currentView: { type: "all", title: "All Indexed Files", hint: "Separate people, albums, and photo tags with commas. All terms must match.", terms: [] },
   activities: [],
   backupPath: "",
@@ -49,6 +52,14 @@ const state = {
 };
 
 const els = {
+  navCollapseBtn: document.querySelector("#navCollapseBtn"),
+  scanPanelToggle: document.querySelector("#scanPanelToggle"),
+  scanPanel: document.querySelector("#scanPanel"),
+  themeToggle: document.querySelector("#themeToggle"),
+  themePanel: document.querySelector("#themePanel"),
+  themeButtons: [...document.querySelectorAll("[data-theme-value]")],
+  settingsToggle: document.querySelector("#settingsToggle"),
+  settingsPanel: document.querySelector("#settingsPanel"),
   clearDbBtn: document.querySelector("#clearDbBtn"),
   supportBadge: document.querySelector("#supportBadge"),
   folderLabel: document.querySelector("#folderLabel"),
@@ -67,6 +78,7 @@ const els = {
   resolveLocationsBtn: document.querySelector("#resolveLocationsBtn"),
   showAllBtn: document.querySelector("#showAllBtn"),
   untaggedBtn: document.querySelector("#untaggedBtn"),
+  untaggedCount: document.querySelector("#untaggedCount"),
   fileCount: document.querySelector("#fileCount"),
   faceCount: document.querySelector("#faceCount"),
   tagCount: document.querySelector("#tagCount"),
@@ -100,18 +112,34 @@ const els = {
   activityPanel: document.querySelector("#activityPanel"),
   activityClose: document.querySelector("#activityClose"),
   activityList: document.querySelector("#activityList"),
+  activityLabel: document.querySelector(".activity-label"),
+  activityIndicator: document.querySelector(".activity-indicator"),
   personSuggestions: document.querySelector("#personSuggestions"),
   albumSuggestions: document.querySelector("#albumSuggestions"),
   locationSuggestions: document.querySelector("#locationSuggestions"),
   gallery: document.querySelector("#gallery"),
   galleryTitle: document.querySelector("#galleryTitle"),
   galleryHint: document.querySelector("#galleryHint"),
+  filtersToggle: document.querySelector("#filtersToggle"),
+  filtersPanel: document.querySelector("#filtersPanel"),
+  filtersReset: document.querySelector("#filtersReset"),
+  filterCount: document.querySelector("#filterCount"),
   mediaFilter: document.querySelector("#mediaFilter"),
   showNoFaceVideos: document.querySelector("#showNoFaceVideos"),
   yearFilter: document.querySelector("#yearFilter"),
   monthFilter: document.querySelector("#monthFilter"),
   dateFilter: document.querySelector("#dateFilter"),
   sortDirection: document.querySelector("#sortDirection"),
+  sidebarFolderLabel: document.querySelector("#sidebarFolderLabel"),
+  detailsInspector: document.querySelector("#detailsInspector"),
+  inspectorClose: document.querySelector("#inspectorClose"),
+  inspectorEmpty: document.querySelector("#inspectorEmpty"),
+  inspectorContent: document.querySelector("#inspectorContent"),
+  inspectorMedia: document.querySelector("#inspectorMedia"),
+  inspectorName: document.querySelector("#inspectorName"),
+  inspectorMeta: document.querySelector("#inspectorMeta"),
+  inspectorFaceSummary: document.querySelector("#inspectorFaceSummary"),
+  inspectorMetadata: document.querySelector("#inspectorMetadata"),
   lightbox: document.querySelector("#lightbox"),
   lightboxImage: document.querySelector("#lightboxImage"),
   lightboxVideo: document.querySelector("#lightboxVideo"),
@@ -147,12 +175,24 @@ async function init() {
     await restoreIndex();
   }
   bindEvents();
+  initializeAppearance();
   setSupportBadge();
   renderActivities();
   showAll();
+  refreshIcons();
 }
 
 function bindEvents() {
+  els.navCollapseBtn.addEventListener("click", toggleNavigation);
+  els.scanPanelToggle.addEventListener("click", () => togglePopover(els.scanPanel, els.scanPanelToggle));
+  els.themeToggle.addEventListener("click", () => togglePopover(els.themePanel, els.themeToggle));
+  els.settingsToggle.addEventListener("click", () => togglePopover(els.settingsPanel, els.settingsToggle));
+  els.filtersToggle.addEventListener("click", () => togglePopover(els.filtersPanel, els.filtersToggle));
+  els.filtersReset.addEventListener("click", resetGalleryFilters);
+  els.inspectorClose.addEventListener("click", closeInspector);
+  for (const button of els.themeButtons) {
+    button.addEventListener("click", () => setTheme(button.dataset.themeValue));
+  }
   els.scanPathBtn.addEventListener("click", scanPath);
   els.clearDbBtn.addEventListener("click", clearIndex);
   els.searchBtn.addEventListener("click", search);
@@ -164,11 +204,11 @@ function bindEvents() {
     if (event.key === "Enter") createAlbum();
   });
   els.scanLocationInput.addEventListener("input", () => scheduleLocationSuggestions(els.scanLocationInput.value));
-  els.mediaFilter.addEventListener("change", renderCurrentView);
-  els.showNoFaceVideos.addEventListener("change", renderCurrentView);
-  els.yearFilter.addEventListener("change", renderCurrentView);
-  els.monthFilter.addEventListener("change", renderCurrentView);
-  els.dateFilter.addEventListener("change", renderCurrentView);
+  els.mediaFilter.addEventListener("change", handleGalleryFilterChange);
+  els.showNoFaceVideos.addEventListener("change", handleGalleryFilterChange);
+  els.yearFilter.addEventListener("change", handleGalleryFilterChange);
+  els.monthFilter.addEventListener("change", handleGalleryFilterChange);
+  els.dateFilter.addEventListener("change", handleGalleryFilterChange);
   els.sortDirection.addEventListener("change", renderCurrentView);
   els.lightboxClose.addEventListener("click", closeLightbox);
   els.lightboxPrev.addEventListener("click", () => stepLightbox(-1));
@@ -177,6 +217,7 @@ function bindEvents() {
     if (event.target === els.lightbox) closeLightbox();
   });
   document.addEventListener("keydown", handleLightboxKeys);
+  document.addEventListener("keydown", handleShellKeys);
   els.searchInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") search();
   });
@@ -193,8 +234,111 @@ function bindEvents() {
   els.activityToggle.addEventListener("click", toggleActivityPanel);
   els.activityClose.addEventListener("click", () => setActivityPanel(false));
   document.addEventListener("click", handleActivityOutsideClick);
+  document.addEventListener("click", handlePopoverOutsideClick);
   setupDesktopBridge();
   setupGalleryPaging();
+}
+
+function refreshIcons(root = document) {
+  void root;
+  window.lucide?.createIcons();
+}
+
+function initializeAppearance() {
+  const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+  setTheme(THEMES.has(savedTheme) ? savedTheme : "system", { persist: false, close: false });
+  if (window.matchMedia("(max-width: 820px)").matches) {
+    document.body.classList.add("nav-collapsed");
+    els.navCollapseBtn.setAttribute("aria-label", "Expand navigation");
+    els.navCollapseBtn.title = "Expand navigation";
+  }
+}
+
+function setTheme(theme, { persist = true, close = true } = {}) {
+  const nextTheme = THEMES.has(theme) ? theme : "system";
+  document.documentElement.dataset.theme = nextTheme;
+  if (persist) localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+  for (const button of els.themeButtons) {
+    const active = button.dataset.themeValue === nextTheme;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  }
+  const labels = { system: "System appearance", dark: "Dark appearance", light: "Light appearance" };
+  els.themeToggle.title = labels[nextTheme];
+  if (close) setPopover(els.themePanel, els.themeToggle, false);
+}
+
+function toggleNavigation() {
+  document.body.classList.toggle("nav-collapsed");
+  const collapsed = document.body.classList.contains("nav-collapsed");
+  els.navCollapseBtn.setAttribute("aria-label", collapsed ? "Expand navigation" : "Collapse navigation");
+  els.navCollapseBtn.title = collapsed ? "Expand navigation" : "Collapse navigation";
+}
+
+function togglePopover(panel, trigger) {
+  setPopover(panel, trigger, panel.hidden);
+}
+
+function setPopover(panel, trigger, isOpen) {
+  if (isOpen) closePopovers(panel);
+  panel.hidden = !isOpen;
+  trigger.setAttribute("aria-expanded", String(isOpen));
+}
+
+function closePopovers(except = null) {
+  const pairs = [
+    [els.scanPanel, els.scanPanelToggle],
+    [els.themePanel, els.themeToggle],
+    [els.settingsPanel, els.settingsToggle],
+    [els.filtersPanel, els.filtersToggle],
+    [els.locationPanel, els.locationToggle],
+  ];
+  for (const [panel, trigger] of pairs) {
+    if (panel === except) continue;
+    panel.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+  }
+}
+
+function handlePopoverOutsideClick(event) {
+  const pairs = [
+    [els.scanPanel, els.scanPanelToggle],
+    [els.themePanel, els.themeToggle],
+    [els.settingsPanel, els.settingsToggle],
+    [els.filtersPanel, els.filtersToggle],
+    [els.locationPanel, els.locationToggle],
+  ];
+  for (const [panel, trigger] of pairs) {
+    if (panel.hidden || panel.contains(event.target) || trigger.contains(event.target)) continue;
+    setPopover(panel, trigger, false);
+  }
+}
+
+function handleShellKeys(event) {
+  if (event.key !== "Escape" || els.lightbox.classList.contains("open")) return;
+  closePopovers();
+  if (document.body.classList.contains("inspector-open")) closeInspector();
+}
+
+function handleGalleryFilterChange() {
+  updateFilterCount();
+  renderCurrentView();
+}
+
+function resetGalleryFilters() {
+  els.yearFilter.value = "";
+  els.monthFilter.value = "";
+  els.dateFilter.value = "";
+  els.showNoFaceVideos.checked = false;
+  updateFilterCount();
+  renderCurrentView();
+}
+
+function updateFilterCount() {
+  const count = [els.yearFilter.value, els.monthFilter.value, els.dateFilter.value].filter(Boolean).length
+    + Number(els.showNoFaceVideos.checked);
+  els.filterCount.textContent = String(count);
+  els.filterCount.hidden = count === 0;
 }
 
 function setupDesktopBridge() {
@@ -210,6 +354,8 @@ function setupDesktopBridge() {
       els.pathInput.value = path;
       els.folderLabel.textContent = displayFolderName(path);
       els.folderLabel.title = path;
+      els.sidebarFolderLabel.textContent = displayFolderName(path);
+      els.sidebarFolderLabel.title = path;
       const activityId = startActivity("Selected folder", displayFolderName(path));
       finishActivity(activityId, "done", path);
     } catch (error) {
@@ -290,6 +436,7 @@ function setLibraryToolMode(mode) {
 }
 
 function setupGalleryPaging() {
+  const scrollContainer = document.querySelector(".gallery-shell");
   if ("IntersectionObserver" in window) {
     state.galleryObserver = new IntersectionObserver(
       (entries) => {
@@ -302,14 +449,15 @@ function setupGalleryPaging() {
     return;
   }
 
-  window.addEventListener("scroll", () => {
-    const nearBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 700;
+  scrollContainer.addEventListener("scroll", () => {
+    const nearBottom = scrollContainer.clientHeight + scrollContainer.scrollTop >= scrollContainer.scrollHeight - 700;
     if (nearBottom) appendGalleryBatch();
   });
 }
 
 function setSupportBadge() {
   if (state.support.backend) {
+    els.supportBadge.classList.remove("warning");
     els.supportBadge.textContent = state.support.engine || "InsightEdge local engine";
     els.generateMemoriesBtn.disabled = false;
     els.progressText.textContent = "Choose a folder and scan it with the local InsightEdge engine.";
@@ -440,12 +588,15 @@ async function scanPath() {
     populateYearFilter();
     els.folderLabel.textContent = displayFolderName(path);
     els.folderLabel.title = path;
+    els.sidebarFolderLabel.textContent = displayFolderName(path);
+    els.sidebarFolderLabel.title = path;
     const autoTagged = payload.autoTagged ? ` ${payload.autoTagged} faces auto-tagged.` : "";
     const warningText = payload.warnings?.length ? ` ${payload.warnings.length} files warned/skipped.` : "";
     const albumText = albumName ? ` Added to "${albumName}".` : "";
     const locationText = locationLabel(location) ? ` Location set to ${locationLabel(location)}.` : "";
     setProgress(`Scan complete: ${payload.files.length} files indexed.${autoTagged}${warningText}${albumText}${locationText}`, 100);
     finishActivity(activityId, "done", `${payload.files.length} files indexed${payload.warnings?.length ? `, ${payload.warnings.length} warnings` : ""}`);
+    setPopover(els.scanPanel, els.scanPanelToggle, false);
     showAll();
   } catch (error) {
     setProgress(error.message, 0);
@@ -473,6 +624,8 @@ function renderGallery(
   els.galleryTitle.textContent = title;
   els.galleryHint.textContent = hint;
   els.matchCount.textContent = ids.length;
+  updateActiveNavigation();
+  updateFilterCount();
   state.galleryObserver?.disconnect();
   els.gallery.replaceChildren();
 
@@ -484,11 +637,13 @@ function renderGallery(
       : "Choose a folder to build your local face index.";
     els.gallery.append(empty);
     updateStats();
+    syncSelectedInspector();
     return;
   }
 
   appendGalleryBatch(initialBatchSize);
   updateStats();
+  syncSelectedInspector();
 }
 
 function appendGalleryBatch(batchSize = GALLERY_BATCH_SIZE) {
@@ -515,10 +670,17 @@ function appendGalleryBatch(batchSize = GALLERY_BATCH_SIZE) {
     els.gallery.append(sentinel);
     state.galleryObserver?.observe(sentinel);
   }
+  refreshIcons(els.gallery);
+}
+
+function updateActiveNavigation() {
+  els.showAllBtn.classList.toggle("active", state.currentView.type === "all");
+  els.untaggedBtn.classList.toggle("active", state.currentView.type === "untagged");
 }
 
 function renderCurrentView({ preserveScroll = false } = {}) {
-  const scrollY = window.scrollY;
+  const scrollContainer = document.querySelector(".gallery-shell");
+  const scrollTop = scrollContainer.scrollTop;
   if (state.currentView.type === "untagged") {
     showUntagged();
   } else if (state.currentView.type === "search") {
@@ -527,7 +689,9 @@ function renderCurrentView({ preserveScroll = false } = {}) {
     applyGalleryFilters();
   }
   if (preserveScroll) {
-    requestAnimationFrame(() => window.scrollTo({ top: scrollY }));
+    requestAnimationFrame(() => {
+      scrollContainer.scrollTop = scrollTop;
+    });
   }
 }
 
@@ -535,91 +699,179 @@ function renderPhoto(fileRecord) {
   const fragment = els.photoTemplate.content.cloneNode(true);
   const card = fragment.querySelector(".photo-card");
   const mediaWrap = fragment.querySelector(".media-wrap");
+  const infoButton = fragment.querySelector(".photo-info-button");
   const name = fragment.querySelector(".file-name");
   const path = fragment.querySelector(".file-path");
   const badges = fragment.querySelector(".photo-badges");
   const faceSummary = fragment.querySelector(".face-summary");
-  const facesSection = fragment.querySelector(".faces-section");
-  const faces = fragment.querySelector(".faces");
-  const rescanButton = fragment.querySelector(".rescan-photo");
-  const resetIgnoredButton = fragment.querySelector(".reset-ignored");
-  const tagChips = fragment.querySelector(".photo-tag-chips");
-  const albumSelect = fragment.querySelector(".album-select");
-  const customTagInput = fragment.querySelector(".custom-tag-input");
-  const addCustomTagButton = fragment.querySelector(".add-custom-tag");
-  const locationInput = fragment.querySelector(".location-input");
-  const saveLocationButton = fragment.querySelector(".save-location");
-  const removeLocationButton = fragment.querySelector(".remove-location");
-  const bulkBar = fragment.querySelector(".bulk-face-actions");
-  const bulkCount = fragment.querySelector(".bulk-face-count");
-  const bulkRemoveButton = fragment.querySelector(".bulk-remove-face");
-  const selectedFaces = new Map();
 
+  card.dataset.fileId = fileRecord.id;
+  card.classList.toggle("selected", state.selectedFileId === fileRecord.id);
+  name.textContent = fileRecord.name;
+  path.textContent = displayFileLocation(fileRecord.path);
+  path.title = fileRecord.path;
+  renderPhotoBadges(fileRecord, badges);
+  mediaWrap.style.aspectRatio = `${fileRecord.width || 4} / ${fileRecord.height || 3}`;
+
+  const media = createMediaElement(fileRecord, () => showMediaUnavailable(mediaWrap, fileRecord));
+  mediaWrap.append(media);
+  mediaWrap.addEventListener("click", (event) => {
+    if (event.target.closest("button")) return;
+    openLightbox(fileRecord.id);
+  });
+  infoButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openInspector(fileRecord.id);
+  });
+
+  const visibleFaces = displayFaces(fileRecord);
+  faceSummary.textContent = formatFaceSummary(fileRecord, visibleFaces);
+
+  return card;
+}
+
+function openInspector(fileId) {
+  const fileRecord = state.files.get(fileId);
+  if (!fileRecord) return;
+  state.selectedFileId = fileId;
+  renderInspector(fileRecord);
+  document.body.classList.add("inspector-open");
+  els.detailsInspector.setAttribute("aria-hidden", "false");
+  markSelectedCard();
+}
+
+function closeInspector() {
+  state.selectedFileId = "";
+  document.body.classList.remove("inspector-open");
+  els.detailsInspector.setAttribute("aria-hidden", "true");
+  els.inspectorContent.hidden = true;
+  els.inspectorEmpty.hidden = false;
+  els.inspectorMedia.replaceChildren();
+  markSelectedCard();
+}
+
+function markSelectedCard() {
+  for (const card of els.gallery.querySelectorAll(".photo-card")) {
+    card.classList.toggle("selected", card.dataset.fileId === state.selectedFileId);
+  }
+}
+
+function syncSelectedInspector() {
+  if (!state.selectedFileId) return;
+  const fileRecord = state.files.get(state.selectedFileId);
+  if (!fileRecord || !state.filteredIds.includes(state.selectedFileId)) {
+    closeInspector();
+    return;
+  }
+  renderInspector(fileRecord);
+  document.body.classList.add("inspector-open");
+  els.detailsInspector.setAttribute("aria-hidden", "false");
+}
+
+function renderInspector(fileRecord) {
+  els.inspectorEmpty.hidden = true;
+  els.inspectorContent.hidden = false;
+  els.inspectorName.textContent = fileRecord.name;
+  const taken = photoTakenDate(fileRecord);
+  els.inspectorMeta.textContent = [taken ? formatDisplayDate(taken) : "Date unknown", displayFileLocation(fileRecord.path)]
+    .filter(Boolean)
+    .join(" · ");
+
+  els.inspectorMedia.replaceChildren();
+  const inspectorMedia = createMediaElement(fileRecord, () => showMediaUnavailable(els.inspectorMedia, fileRecord));
+  inspectorMedia.controls = isVideoRecord(fileRecord);
+  els.inspectorMedia.append(inspectorMedia);
+
+  const facesSection = els.inspectorContent.querySelector(".faces-section");
+  const faces = facesSection.querySelector(".faces");
+  const bulkBar = facesSection.querySelector(".bulk-face-actions");
+  const bulkCount = facesSection.querySelector(".bulk-face-count");
+  const bulkRemoveButton = facesSection.querySelector(".bulk-remove-face");
+  const visibleFaces = displayFaces(fileRecord);
+  const selectedFaces = new Map();
   const updateBulkBar = () => {
     const count = selectedFaces.size;
     bulkBar.hidden = count === 0;
     bulkCount.textContent = `${count} selected`;
   };
 
-  card.dataset.fileId = fileRecord.id;
-  name.textContent = fileRecord.name;
-  path.textContent = displayFileLocation(fileRecord.path);
-  path.title = fileRecord.path;
-  renderPhotoBadges(fileRecord, badges);
+  faces.replaceChildren();
+  bulkBar.hidden = true;
+  facesSection.open = visibleFaces.some((face) => !normalizeName(face.tag));
+  els.inspectorFaceSummary.textContent = formatFaceSummary(fileRecord, visibleFaces);
+  for (const face of visibleFaces) {
+    faces.append(renderFaceEditor(fileRecord, face, (isSelected) => {
+      if (isSelected) selectedFaces.set(face.id, face);
+      else selectedFaces.delete(face.id);
+      updateBulkBar();
+    }));
+  }
+  bulkRemoveButton.onclick = () => bulkRemoveFaces(fileRecord, [...selectedFaces.values()], bulkRemoveButton);
+  if (!visibleFaces.length) {
+    const empty = document.createElement("p");
+    empty.className = "inspector-note";
+    empty.textContent = fileRecord.faces.length
+      ? "No main faces to tag. Try rescanning after adjusting video filters."
+      : "No faces detected in this file.";
+    faces.append(empty);
+  }
+
+  const organizeSection = els.inspectorContent.querySelector(".organize-section");
+  const tagChips = organizeSection.querySelector(".photo-tag-chips");
+  const albumSelect = organizeSection.querySelector(".album-select");
+  const customTagInput = organizeSection.querySelector(".custom-tag-input");
+  const addCustomTagButton = organizeSection.querySelector(".add-custom-tag");
+  const locationInput = organizeSection.querySelector(".location-input");
+  const saveLocationButton = organizeSection.querySelector(".save-location");
+  const removeLocationButton = organizeSection.querySelector(".remove-location");
   renderPhotoCollectionControls(fileRecord, tagChips, albumSelect, {
     input: locationInput,
     saveButton: saveLocationButton,
     removeButton: removeLocationButton,
   });
-  albumSelect.addEventListener("change", () => addPhotoToAlbum(fileRecord, albumSelect));
-  addCustomTagButton.addEventListener("click", () => addCustomPhotoTag(fileRecord, customTagInput, addCustomTagButton));
-  customTagInput.addEventListener("keydown", (event) => {
+  albumSelect.onchange = () => addPhotoToAlbum(fileRecord, albumSelect);
+  addCustomTagButton.onclick = () => addCustomPhotoTag(fileRecord, customTagInput, addCustomTagButton);
+  customTagInput.onkeydown = (event) => {
     if (event.key === "Enter") addCustomPhotoTag(fileRecord, customTagInput, addCustomTagButton);
-  });
-  if (rescanButton) {
-    rescanButton.addEventListener("click", () => rescanPhoto(fileRecord, false, rescanButton));
-  }
-  if (resetIgnoredButton) {
-    resetIgnoredButton.addEventListener("click", () => {
-      if (!confirm("Bring back ignored faces for this photo and rescan it?")) return;
-      rescanPhoto(fileRecord, true, resetIgnoredButton);
-    });
-  }
-  mediaWrap.style.aspectRatio = `${fileRecord.width || 4} / ${fileRecord.height || 3}`;
+  };
 
-  const media = createMediaElement(fileRecord, () => showMediaUnavailable(mediaWrap, fileRecord));
-  mediaWrap.append(media);
-  mediaWrap.addEventListener("click", () => openLightbox(fileRecord.id));
+  const rescanButton = els.inspectorContent.querySelector(".rescan-photo");
+  const resetIgnoredButton = els.inspectorContent.querySelector(".reset-ignored");
+  rescanButton.onclick = () => rescanPhoto(fileRecord, false, rescanButton);
+  resetIgnoredButton.onclick = () => {
+    if (!confirm("Bring back ignored faces for this photo and rescan it?")) return;
+    rescanPhoto(fileRecord, true, resetIgnoredButton);
+  };
 
-  const visibleFaces = displayFaces(fileRecord);
-  facesSection.open = visibleFaces.some((face) => !normalizeName(face.tag));
-  faceSummary.textContent = formatFaceSummary(fileRecord, visibleFaces);
-  for (const face of visibleFaces) {
-    if (!isVideoRecord(fileRecord)) {
-      mediaWrap.append(renderFaceBox(face, fileRecord));
-    }
-    faces.append(renderFaceEditor(fileRecord, face, (isSelected) => {
-      if (isSelected) {
-        selectedFaces.set(face.id, face);
-      } else {
-        selectedFaces.delete(face.id);
-      }
-      updateBulkBar();
-    }));
-  }
+  renderInspectorMetadata(fileRecord);
+  refreshIcons(els.detailsInspector);
+}
 
-  bulkRemoveButton.addEventListener("click", () => bulkRemoveFaces(fileRecord, [...selectedFaces.values()], bulkRemoveButton));
+function renderInspectorMetadata(fileRecord) {
+  const metadata = fileRecord.metadata || {};
+  const dimensions = fileRecord.width && fileRecord.height ? `${fileRecord.width} × ${fileRecord.height}` : "Unknown";
+  const rows = [
+    ["Type", isVideoRecord(fileRecord) ? "Video" : "Photo"],
+    ["Dimensions", dimensions],
+    ["Taken", metadata.taken_at ? formatDisplayDate(metadata.taken_at) : "Unknown"],
+    ["Path", fileRecord.path || "Unknown"],
+  ];
+  els.inspectorMetadata.replaceChildren(...rows.map(([label, value]) => {
+    const row = document.createElement("div");
+    const term = document.createElement("dt");
+    const detail = document.createElement("dd");
+    term.textContent = label;
+    detail.textContent = value;
+    detail.title = value;
+    row.append(term, detail);
+    return row;
+  }));
+}
 
-  if (!visibleFaces.length) {
-    const empty = document.createElement("p");
-    empty.className = "file-path";
-    empty.textContent = fileRecord.faces.length
-      ? "No main faces to tag. Try rescan after adjusting video filters."
-      : "No faces detected in this file.";
-    faces.append(empty);
-  }
-
-  return card;
+function formatDisplayDate(value) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value).slice(0, 10);
+  return parsed.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" });
 }
 
 function renderPhotoBadges(fileRecord, container) {
@@ -682,10 +934,10 @@ function renderPhotoCollectionControls(fileRecord, tagChips, albumSelect, locati
 
   const place = fileRecord.place || {};
   locationControls.input.value = locationLabel(place);
-  locationControls.input.addEventListener("input", () => scheduleLocationSuggestions(locationControls.input.value));
-  locationControls.saveButton.addEventListener("click", () => savePhotoLocation(fileRecord, locationControls));
+  locationControls.input.oninput = () => scheduleLocationSuggestions(locationControls.input.value);
+  locationControls.saveButton.onclick = () => savePhotoLocation(fileRecord, locationControls);
   locationControls.removeButton.disabled = !locationLabel(place);
-  locationControls.removeButton.addEventListener("click", () => removePhotoLocation(fileRecord, locationControls.removeButton));
+  locationControls.removeButton.onclick = () => removePhotoLocation(fileRecord, locationControls.removeButton);
 }
 
 function formatFaceSummary(fileRecord, visibleFaces) {
@@ -997,7 +1249,8 @@ function renderFaceEditor(fileRecord, face, onSelectionChange = () => {}) {
 async function removeFace(fileRecord, face) {
   if (face.tag && !confirm(`Remove face tagged "${face.tag}"?`)) return;
 
-  const scrollTop = window.scrollY;
+  const scrollContainer = document.querySelector(".gallery-shell");
+  const scrollTop = scrollContainer.scrollTop;
   const loadedCardCount = Math.max(state.galleryCursor, GALLERY_BATCH_SIZE);
   const activityId = startActivity("Remove face box", fileRecord.name);
   try {
@@ -1009,7 +1262,7 @@ async function removeFace(fileRecord, face) {
       els.galleryHint.textContent,
       loadedCardCount,
     );
-    window.scrollTo({ top: scrollTop });
+    scrollContainer.scrollTop = scrollTop;
     finishActivity(activityId, "done", fileRecord.name);
   } catch (error) {
     setProgress(error.message, 0);
@@ -1024,7 +1277,8 @@ async function bulkRemoveFaces(fileRecord, faces, button) {
   const tagged = faces.filter((face) => face.tag).map((face) => face.tag);
   if (tagged.length && !confirm(`Remove ${faces.length} selected face boxes, including tagged faces?`)) return;
 
-  const scrollTop = window.scrollY;
+  const scrollContainer = document.querySelector(".gallery-shell");
+  const scrollTop = scrollContainer.scrollTop;
   const loadedCardCount = Math.max(state.galleryCursor, GALLERY_BATCH_SIZE);
   const faceIds = faces.flatMap((face) => face.groupedFaceIds || [face.id]);
   const activityId = startActivity("Remove selected faces", `${faces.length} selected in ${fileRecord.name}`);
@@ -1038,7 +1292,7 @@ async function bulkRemoveFaces(fileRecord, faces, button) {
       els.galleryHint.textContent,
       loadedCardCount,
     );
-    window.scrollTo({ top: scrollTop });
+    scrollContainer.scrollTop = scrollTop;
     finishActivity(activityId, "done", `${faces.length} face boxes removed`);
   } catch (error) {
     setProgress(error.message, 0);
@@ -1216,6 +1470,7 @@ function replaceGalleryCard(fileId) {
   for (const card of els.gallery.querySelectorAll(".photo-card")) {
     if (card.dataset.fileId === fileId) {
       card.replaceWith(renderPhoto(fileRecord));
+      refreshIcons(els.gallery);
       return true;
     }
   }
@@ -1254,6 +1509,7 @@ function updateAfterFaceTag(fileRecord, faceIds, tag, payload = null) {
     renderCurrentView({ preserveScroll: true });
   } else {
     refreshRenderedFaceTags();
+    if (state.selectedFileId === currentFile.id) renderInspector(currentFile);
   }
   return currentFile;
 }
@@ -1279,6 +1535,10 @@ function refreshRenderedFaceTags() {
       }
     }
   }
+  if (state.selectedFileId) {
+    const selected = state.files.get(state.selectedFileId);
+    if (selected) renderInspector(selected);
+  }
 }
 
 function shouldRerenderAfterTag(fileRecord) {
@@ -1297,6 +1557,7 @@ function showAll() {
   els.yearFilter.value = "";
   els.monthFilter.value = "";
   els.dateFilter.value = "";
+  updateFilterCount();
   state.currentView = { type: "all", title: "All Indexed Files", hint: "Separate people, albums, and photo tags with commas. All terms must match.", terms: [] };
   applyGalleryFilters();
 }
@@ -1693,8 +1954,7 @@ function toggleLocationPanel() {
 }
 
 function setLocationPanel(isOpen) {
-  els.locationPanel.hidden = !isOpen;
-  els.locationToggle.setAttribute("aria-expanded", String(isOpen));
+  setPopover(els.locationPanel, els.locationToggle, isOpen);
   if (isOpen) renderLocations();
 }
 
@@ -2220,9 +2480,11 @@ function updateStats() {
   const files = [...state.files.values()];
   const faces = files.flatMap((fileRecord) => fileRecord.faces);
   const tags = new Set(faces.map((face) => normalizeName(face.tag)).filter(Boolean));
+  const untaggedFiles = files.filter((fileRecord) => fileRecord.faces.some((face) => !normalizeName(face.tag))).length;
   els.fileCount.textContent = files.length;
   els.faceCount.textContent = faces.length;
   els.tagCount.textContent = tags.size;
+  els.untaggedCount.textContent = untaggedFiles;
   renderPeople();
 }
 
@@ -2304,7 +2566,11 @@ function trimActivities() {
 
 function renderActivities() {
   const running = state.activities.filter((activity) => activity.status === "running").length;
-  els.activityToggle.textContent = running ? `Activity: ${running} running` : `Activity: ${state.activities.length ? "Recent" : "Idle"}`;
+  const label = running ? `Activity: ${running} running` : `Activity: ${state.activities.length ? "Recent" : "Idle"}`;
+  els.activityToggle.setAttribute("aria-label", label);
+  els.activityToggle.title = label;
+  els.activityLabel.textContent = label;
+  els.activityIndicator.classList.toggle("running", running > 0);
   els.activityList.replaceChildren();
 
   if (!state.activities.length) {
@@ -2467,6 +2733,8 @@ async function clearIndex() {
       els.locationSuggestions.replaceChildren();
       renderLocations();
       els.folderLabel.textContent = "Choose a folder to start";
+      els.sidebarFolderLabel.textContent = "No folder selected";
+      closeInspector();
       setProgress("Index cleared.", 0);
       showAll();
       finishActivity(activityId, "done", "Index cleared");
