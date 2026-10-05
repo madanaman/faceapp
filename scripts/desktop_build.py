@@ -29,6 +29,7 @@ def copy_desktop_assets() -> None:
     desktop.mkdir(exist_ok=True)
     for name in ("index.html", "styles.css", "app.js"):
         shutil.copy2(ROOT / name, desktop / name)
+    shutil.copytree(ROOT / "assets", desktop / "assets", dirs_exist_ok=True)
 
 
 def rust_target() -> str:
